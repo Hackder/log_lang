@@ -2,12 +2,6 @@ import itertools
 import sys
 from z3 import And, Not, Bool, Implies, Or, Solver
 
-def triangle(a):
-    return Bool('triangle(' + ', '.join([a]) + ')')
-
-def same_color(a, b):
-    return Bool('same_color(' + ', '.join([a, b]) + ')')
-
 def blue(a):
     return Bool('blue(' + ', '.join([a]) + ')')
 
@@ -17,21 +11,27 @@ def circle(a):
 def green(a):
     return Bool('green(' + ', '.join([a]) + ')')
 
+def larger(a, b):
+    return Bool('larger(' + ', '.join([a, b]) + ')')
+
 def red(a):
     return Bool('red(' + ', '.join([a]) + ')')
 
-def larger(a, b):
-    return Bool('larger(' + ', '.join([a, b]) + ')')
+def same_color(a, b):
+    return Bool('same_color(' + ', '.join([a, b]) + ')')
 
 def square(a):
     return Bool('square(' + ', '.join([a]) + ')')
 
-B = '0'
-D = '1'
+def triangle(a):
+    return Bool('triangle(' + ', '.join([a]) + ')')
+
+A = '0'
+B = '1'
 C = '2'
-A = '3'
-all_symbols = set([B, D, C, A])
-symbol_names = ['B', 'D', 'C', 'A']
+D = '3'
+all_symbols = set([C, B, D, A])
+symbol_names = ['C', 'B', 'D', 'A']
 
 def main():
     solver = Solver()

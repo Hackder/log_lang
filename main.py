@@ -599,14 +599,14 @@ def z3_generate(ctx: Context) -> str:
 
     # generate predicates
     letters = "abcdefghijklmnopqrstuvwxyz"
-    for name, arity in ctx.ast.predicates:
+    for name, arity in sorted(ctx.ast.predicates):
         params = ", ".join(list(letters[:arity]))
         signature = f"def {name}({params}):"
         body = ident + f"return Bool('{name}(' + ', '.join([{params}]) + ')')"
         lines.extend([signature, body, ""])
 
     # generate symbols
-    for i, symbol in enumerate(ctx.ast.symbols):
+    for i, symbol in enumerate(sorted(ctx.ast.symbols)):
         lines.append(f"{symbol} = '{i}'")
 
     all_symbols = "set([" + ", ".join(ctx.ast.symbols) + "])"
