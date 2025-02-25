@@ -1,4 +1,5 @@
 import itertools
+import os
 import sys
 from dataclasses import dataclass
 from enum import Enum
@@ -633,11 +634,14 @@ def z3_generate(ctx: Context) -> str:
 
 
 def main():
-    if len(sys.argv) != 2:
-        print("Usage: python main.py <source_file>")
+    if len(sys.argv) != 3:
+        print("Usage: python main.py <subcommand> <options>", file=sys.stderr)
+        print("python3 main.py transpile <source_file>", file=sys.stderr)
+        print("python3 main.py solve <source_file>", file=sys.stderr)
         sys.exit(1)
 
-    source_filename = sys.argv[1]
+    subcommand = sys.argv[1]
+    source_filename = sys.argv[2]
     with open(source_filename, "r") as f:
         source = f.read()
 
@@ -645,20 +649,23 @@ def main():
 
     tokens = []
     while (token := tokenizer.next_token()).kind != TokenKind.EOF:
-        # print(token)
         if token.kind == TokenKind.COMMENT:
             continue
         tokens.append(token)
 
     parser = Parser(tokens)
     ast = parser.parse()
-    # for node in ast.expressions:
-    #     print(node)
 
     ctx = Context(ast, [], Flags())
 
     z3_code = z3_generate(ctx)
-    print(z3_code)
+
+    if subcommand == "transpile":
+        print(z3_code)
+    elif subcommand == "solve":
+        with open("loglang_out.py", "w") as f:
+            f.write(z3_code)
+        os.execvp("python3", ["python3", "loglang_out.py"])
 
 
 if __name__ == "__main__":
