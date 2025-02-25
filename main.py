@@ -149,7 +149,7 @@ class Tokenizer:
                     and self.source[self.position] == ">"
                 ):
                     self.position += 1
-                    return Token(TokenKind.LEFT_IMPLIES, c + ">")
+                    return Token(TokenKind.RIGHT_IMPLIES, c + ">")
 
                 return Token(TokenKind.NOT, c)
             case "&" | "∧":
