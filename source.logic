@@ -1,5 +1,4 @@
 
-
 // ¬ ( red(B) → ( square(B) → triangle(C) ) )
 // ¬ ( ( blue(C) ∧ ¬ triangle(C) ) ↔ ¬ larger(D, B) )
 // ( ( circle(C) ∨ circle(B) ) → ( larger(B, C) ∧ ¬ green(D) ) )
@@ -15,7 +14,16 @@
 // ∀x((red(x) ∨ green(x) ∨ blue(x)) ∧ ¬(red(x) ∧ green(x)) ∧ ¬(red(x) ∧ blue(x)) ∧ ¬(green(x) ∧ blue(x)))
 // ∀x((triangle(x) ∨ square(x) ∨ circle(x)) ∧ ¬(triangle(x) ∧ square(x)) ∧ ¬(triangle(x) ∧ circle(x)) ∧ ¬(square(x) ∧ circle(x)))
 // ∀x∀y(larger(x,y) → ¬larger(y,x)) ∧ ∀x∀y∀z(larger(x,y) ∧ larger(y,z)→ larger(x,z))
-// ∀x same_color(x,x) ∧ ∀x∀y(same_color(x,y) → same_color(y,x)) ∧ ∀x∀y∀z(same_color(x,y) ∧ same_color(y,z) → same_color(x,z)) ∧ ∀x∀y( (¬same_color(x,y) ∨ red(x) ∧ red(y) ∨ green(x) ∧ green(y) ∨ blue(x) ∧ blue(y) ∨ ¬(red(x) ∨ red(y) ∨ green(x) ∨ green(y) ∨ blue(x) ∨ blue(y)) ) ∧ (same_color(x,y) ∨ (¬red(x) ∨ ¬red(y)) ∧ (¬green(x) ∨ ¬green(y)) ∧ (¬blue(x) ∨ ¬blue(y)) ) )
+// ∀x same_color(x,x) ∧ ∀x∀y (same_color(x,y) → same_color(y,x)) ∧ ∀x∀y∀z(same_color(x,y) ∧ same_color(y,z) → same_color(x,z)) ∧ ∀x∀y( (¬same_color(x,y) ∨ red(x) ∧ red(y) ∨ green(x) ∧ green(y) ∨ blue(x) ∧ blue(y) ∨ ¬(red(x) ∨ red(y) ∨ green(x) ∨ green(y) ∨ blue(x) ∨ blue(y)) ) ∧ (same_color(x,y) ∨ (¬red(x) ∨ ¬red(y)) ∧ (¬green(x) ∨ ¬green(y)) ∧ (¬blue(x) ∨ ¬blue(y)) ) )
 
-mom(A) -> dad(B)
-dad(B) -> son(C)
+// @forall x in #range(0, 1)
+//   @where x < 3:
+//   ( red(x) ∨ green(x) ∨ blue(x) )
+// 
+// @forall x in #range(0, 10, 3) ( triangle(x) ∨ square(x) ∨ circle(x) )
+
+// definition(a, b)
+// 
+// @forall x in #range(3)
+//   @forall y in #range(9)
+//   larger(x, y)
