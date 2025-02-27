@@ -22,8 +22,43 @@
 // 
 // @forall x in #range(0, 10, 3) ( triangle(x) ∨ square(x) ∨ circle(x) )
 
-// definition(a, b)
+// #symbols(#range(10), a, b, c, d)
 // 
 // @forall x in #range(3)
 //   @forall y in #range(9)
 //   larger(x, y)
+// 
+// @forall x dad(x)
+
+#symbols(#range(10))
+
+@forall row in #range(9)
+  @forall col in #range(9)
+  @exists n in #range(1, 10)
+  s(row, col, n)
+
+@forall row in #range(9)
+  @forall col1 in #range(9)
+  @forall col2 in #range(col1 + 1, 9)
+  @forall n in #range(1, 10)
+  ( s(row, col1, n) <-> !s(row, col2, n) )
+
+@forall col in #range(9)
+  @forall row1 in #range(9)
+  @forall row2 in #range(row1 + 1, 9)
+  @forall n in #range(1, 10)
+  ( s(row1, col, n) -> !s(row2, col, n) )
+
+@forall cell_r in #range(3)
+  @forall cell_c in #range(3)
+  @forall r1 in #range(3)
+  @forall c1 in #range(3)
+  @forall r2 in #range(3)
+  @forall c2 in #range(3)
+  @forall n in #range(1, 10)
+  @where r1 != r2 && c1 != c2
+  (
+    s(cell_r * 3 + r1, cell_c * 4 + c1, n) ->
+    !s(cell_r * 3 + r2, cell_c * 3 + c2, n)
+  )
+

@@ -20,6 +20,12 @@ class TokenKind(Enum):
     GREATER_OR_EQUAL = 12
     LESS = 13
     LESS_OR_EQUAL = 14
+    PLUS = 15
+    MINUS = 16
+    MULTIPLY = 17
+    DIVIDE = 18
+    MODULO = 19
+    EXPONENT = 20
 
     NOT = 100
     AND = 101
@@ -66,17 +72,25 @@ class Token:
             TokenKind.GREATER_OR_EQUAL,
             TokenKind.LESS,
             TokenKind.LESS_OR_EQUAL,
+            TokenKind.AND,
+            TokenKind.OR,
+            TokenKind.PLUS,
+            TokenKind.MINUS,
+            TokenKind.MULTIPLY,
+            TokenKind.DIVIDE,
+            TokenKind.MODULO,
+            TokenKind.EXPONENT,
         ]
 
     def is_logical_unary_op(self) -> bool:
-        return self.kind == TokenKind.NOT
+        return self.kind == TokenKind.NOT or self.kind == TokenKind.MINUS
 
     def is_unary_op(self) -> bool:
-        return self.kind == TokenKind.NOT
+        return self.kind == TokenKind.NOT or self.kind == TokenKind.MINUS
 
     def priority_logical(self) -> int:
         match self.kind:
-            case TokenKind.NOT:
+            case TokenKind.NOT | TokenKind.MINUS:
                 return 3
             case TokenKind.FOR_ALL:
                 return 3
@@ -99,6 +113,8 @@ class Token:
         match self.kind:
             case TokenKind.NOT:
                 return 3
+            case TokenKind.EXPONENT:
+                return 3
             case TokenKind.EQUALS:
                 return 2
             case TokenKind.NOT_EQUALS:
@@ -111,7 +127,17 @@ class Token:
                 return 2
             case TokenKind.LESS_OR_EQUAL:
                 return 2
+            case TokenKind.MULTIPLY:
+                return 2
+            case TokenKind.DIVIDE:
+                return 2
+            case TokenKind.MODULO:
+                return 2
             case TokenKind.AND:
+                return 1
+            case TokenKind.PLUS:
+                return 1
+            case TokenKind.MINUS:
                 return 1
             case TokenKind.OR:
                 return 0
@@ -191,6 +217,18 @@ class Tokenizer:
             case ":":
                 self.position += 1
                 return Token(TokenKind.COLON, c)
+            case "+":
+                self.position += 1
+                return Token(TokenKind.PLUS, c)
+            case "*":
+                self.position += 1
+                return Token(TokenKind.MULTIPLY, c)
+            case "%":
+                self.position += 1
+                return Token(TokenKind.MODULO, c)
+            case "^":
+                self.position += 1
+                return Token(TokenKind.EXPONENT, c)
             case "-":
                 self.position += 1
                 if (
@@ -200,7 +238,7 @@ class Tokenizer:
                     self.position += 1
                     return Token(TokenKind.RIGHT_IMPLIES, c + ">")
 
-                return Token(TokenKind.NOT, c)
+                return Token(TokenKind.MINUS, c)
             case "=":
                 self.position += 1
                 if self.position < len(self.source):
@@ -321,7 +359,7 @@ class Tokenizer:
                     ):
                         self.position += 1
                     return Token(TokenKind.COMMENT, self.source[start : self.position])
-                return Token(TokenKind.INVALID, "/")
+                return Token(TokenKind.DIVIDE, "/")
             case other:
                 self.position += 1
                 return Token(TokenKind.INVALID, other)
@@ -474,24 +512,13 @@ class Parser:
         self.__advance()
 
         params = []
-        while self.__peek().kind == TokenKind.IDENTIFIER:
-            param = self.__peek()
-            params.append(IdentifierNode(param))
-            self.__advance()
-
-            if param.source in self._dynamic_params:
-                params[-1].dynamic_param = True
-            else:
-                self._symbols.add(params[-1].token.source)
+        while self.__peek().kind != TokenKind.RIGHT_PAREN:
+            param = self.__parse_expression()
+            params.append(param)
 
             if self.__peek().kind == TokenKind.COMMA:
                 self.__advance()
-                continue
-            elif self.__peek().kind == TokenKind.RIGHT_PAREN:
-                self.__advance()
-                break
-            else:
-                raise Exception("Invalid predicate parameter list")
+        self.__advance()
 
         self._predicates.add((name.source, len(params)))
         return PredicateNode(name, params)
@@ -506,16 +533,35 @@ class Parser:
             params = []
             while self.__peek().kind != TokenKind.RIGHT_PAREN:
                 params.append(self.__parse_expression())
-                if self.__peek().kind == TokenKind.COMMA:
+                next_token = self.__peek()
+                if next_token.kind == TokenKind.COMMA:
                     self.__advance()
                     continue
-                elif self.__peek().kind == TokenKind.RIGHT_PAREN:
+                elif next_token.kind == TokenKind.RIGHT_PAREN:
                     break
                 else:
-                    raise Exception("Invalid directive parameters")
+                    raise Exception(f"Invalid directive parameters: {next_token}")
             self.__advance()
         else:
             params = []
+
+        # TODO: Refactor this
+        match token.source:
+            case "#symbols":
+                for param in params:
+                    match param:
+                        case IdentifierNode(token, _):
+                            self._symbols.add(param.token.source)
+                        case DirectiveNode(token, directive_params):
+                            match token.source:
+                                case "#range":
+                                    values = [
+                                        int(p.token.source) for p in directive_params
+                                    ]
+                                    for value in range(*values):
+                                        self._symbols.add(str(value))
+            case _:
+                pass
 
         return DirectiveNode(token, params)
 
@@ -572,6 +618,10 @@ class Parser:
         if token.kind == TokenKind.IDENTIFIER:
             self.__advance()
             child = IdentifierNode(token)
+            if token.source in self._dynamic_params:
+                child.dynamic_param = True
+            else:
+                self._symbols.add(token.source)
         elif token.kind == TokenKind.LEFT_PAREN:
             self.__advance()
             child = self.__parse_expression(0)
@@ -584,6 +634,8 @@ class Parser:
         elif token.kind == TokenKind.FALSE:
             self.__advance()
             child = BoolNode(token, False)
+        elif token.kind == TokenKind.DIRECTIVE:
+            return self.__parse_directive()
         elif token.is_unary_op():
             self.__advance()
             unary_child = self.__parse_expression(token.priority_regular())
@@ -643,17 +695,29 @@ def python_expr_regular(ctx: Context, expression: Node) -> str:
                     op = "and"
                 case TokenKind.OR:
                     op = "or"
+                case TokenKind.PLUS:
+                    op = "+"
+                case TokenKind.MINUS:
+                    op = "-"
+                case TokenKind.MULTIPLY:
+                    op = "*"
+                case TokenKind.DIVIDE:
+                    op = "/"
+                case TokenKind.MODULO:
+                    op = "%"
+                case TokenKind.EXPONENT:
+                    op = "**"
                 case _:
                     raise Exception("Invalid binary operator")
 
             left = python_expr_regular(ctx, left)
             right = python_expr_regular(ctx, right)
-            return f"({left} {op} {right})"
+            return f"apply_op('{op}', {left}, {right})"
         case DirectiveNode(token, child):
             match token.source:
                 case "#range":
                     params = [python_expr_regular(ctx, param) for param in child]
-                    return f"map(str, range({', '.join(params)}))"
+                    return f"range({', '.join(params)})"
                 case _:
                     raise Exception("Invalid directive")
         case _:
@@ -668,11 +732,13 @@ def z3_expr_logical(ctx: Context, expression: Node) -> str:
                     if token.source == name:
                         return value
             return token.source
+        case DirectiveNode(token, params):
+            return ""
         case PredicateNode(name, params):
-            return f"{name.source}({', '.join([z3_expr_logical(ctx, param) for param in params])})"
+            return f"{name.source}({', '.join([python_expr_regular(ctx, param) for param in params])})"
         case UnaryOpNode(token, child):
             match token.kind:
-                case TokenKind.NOT:
+                case TokenKind.NOT | TokenKind.MINUS:
                     return f"Not({z3_expr_logical(ctx, child)})"
                 case _:
                     raise Exception("Invalid unary operator")
@@ -760,6 +826,14 @@ LIGHT_RED = "\033[91m"
 CYAN = "\033[96m"
 RESET = "\033[0m"
 
+def apply_op(op, a, b):
+    if type(a) == type(b):
+        return eval(f"a {op} b")
+    if type(a) is str or type(b) is str:
+        return eval(f"str(a) {op} str(b)")
+
+    return eval(f"a {op} b")
+
 def get_name_for_symbol_value(value):
     for sname in symbol_names:
         search = eval(sname)
@@ -776,7 +850,6 @@ def parse_model_key(key):
 
 def format_model_key(key):
     name, args = parse_model_key(key)
-    args = [get_name_for_symbol_value(arg) for arg in args]
     return f"{name}({', '.join(args)})"
 
 def getchar():
@@ -833,6 +906,16 @@ if __name__ == "__main__":
 """
 
 
+def python_excape_name(name: str) -> str:
+    if name[0].isdigit():
+        return f"_{name}"
+
+    if name in ["and", "or", "not", "def", "return", "lambda"]:
+        return f"_{name}"
+
+    return name
+
+
 def z3_generate(ctx: Context) -> str:
     ident = " " * 4
     lines = []
@@ -840,18 +923,21 @@ def z3_generate(ctx: Context) -> str:
     # generate predicates
     letters = "abcdefghijklmnopqrstuvwxyz"
     for name, arity in sorted(ctx.ast.predicates):
-        params = ", ".join(list(letters[:arity]))
+        str_params = ", ".join([f"str({i})" for i in letters[:arity]])
+        params = ", ".join(letters[:arity])
         signature = f"def {name}({params}):"
-        body = ident + f"return Bool('{name}(' + ', '.join([{params}]) + ')')"
+        body = ident + f"return Bool('{name}(' + ', '.join([{str_params}]) + ')')"
         lines.extend([signature, body, ""])
 
     # generate symbols
     for symbol in sorted(ctx.ast.symbols):
-        lines.append(f"{symbol} = '{symbol}'")
+        lines.append(f"{python_excape_name(symbol)} = '{symbol}'")
 
-    all_symbols = "set([" + ", ".join(ctx.ast.symbols) + "])"
+    all_symbols = (
+        "set([" + ", ".join([python_excape_name(x) for x in ctx.ast.symbols]) + "])"
+    )
     lines.append(f"all_symbols = {all_symbols}")
-    symbol_names = ", ".join([f"'{s}'" for s in ctx.ast.symbols])
+    symbol_names = ", ".join([f"'{python_excape_name(s)}'" for s in ctx.ast.symbols])
     lines.append(f"symbol_names = [{symbol_names}]")
 
     lines.append("")
