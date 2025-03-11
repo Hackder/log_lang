@@ -433,8 +433,13 @@ class PredicateNode(Node):
 
 
 @dataclass
+class AtomicFormula(Node):
+    pass
+
+
+@dataclass
 class Ast:
-    predicates: set[tuple[str, int]]
+    atoms: set[tuple[str, int]]
     symbols: set[str]
     expressions: list[Node]
 
@@ -443,14 +448,14 @@ class Parser:
     tokens: list[Token]
     position: int
 
-    _predicates: set[tuple[str, int]]
+    _atoms: set[tuple[str, int]]
     _symbols: set[str]
     _dynamic_params: list[str]
 
     def __init__(self, tokens: list[Token]):
         self.tokens = tokens
         self.position = 0
-        self._predicates = set()
+        self._atoms = set()
         self._symbols = set()
         self._dynamic_params = []
 
@@ -502,13 +507,14 @@ class Parser:
 
         return QuantifierNode(token, kind, variables, directive, child)
 
-    def __parse_predicate(self) -> Node:
+    def __parse_atom(self) -> Node:
         name = self.__peek()
         assert name.kind == TokenKind.IDENTIFIER, "Expected identifier got " + str(name)
         self.__advance()
 
         if self.__peek().kind != TokenKind.LEFT_PAREN:
-            raise Exception("Expected left paren")
+            self._atoms.add((name.source, 0))
+            return AtomicFormula(name)
         self.__advance()
 
         params = []
@@ -520,7 +526,7 @@ class Parser:
                 self.__advance()
         self.__advance()
 
-        self._predicates.add((name.source, len(params)))
+        self._atoms.add((name.source, len(params)))
         return PredicateNode(name, params)
 
     def __parse_directive(self) -> Node:
@@ -585,7 +591,7 @@ class Parser:
         elif token.kind == TokenKind.WHERE:
             child = self.__parse_where_clause()
         elif token.kind == TokenKind.IDENTIFIER:
-            child = self.__parse_predicate()
+            child = self.__parse_atom()
         elif token.is_logical_unary_op():
             self.__advance()
             child = UnaryOpNode(
@@ -656,7 +662,7 @@ class Parser:
         nodes = []
         while self.__peek().kind != TokenKind.EOF:
             nodes.append(self.__parse_logical_expression())
-        return Ast(self._predicates, self._symbols, nodes)
+        return Ast(self._atoms, self._symbols, nodes)
 
 
 @dataclass
@@ -712,7 +718,7 @@ def python_expr_regular(ctx: Context, expression: Node) -> str:
 
             left = python_expr_regular(ctx, left)
             right = python_expr_regular(ctx, right)
-            return f"apply_op('{op}', {left}, {right})"
+            return f"({left} {op} {right})"
         case DirectiveNode(token, child):
             match token.source:
                 case "#range":
@@ -736,6 +742,8 @@ def z3_expr_logical(ctx: Context, expression: Node) -> str:
             return ""
         case PredicateNode(name, params):
             return f"{name.source}({', '.join([python_expr_regular(ctx, param) for param in params])})"
+        case AtomicFormula(token):
+            return token.source
         case UnaryOpNode(token, child):
             match token.kind:
                 case TokenKind.NOT | TokenKind.MINUS:
@@ -826,14 +834,6 @@ LIGHT_RED = "\033[91m"
 CYAN = "\033[96m"
 RESET = "\033[0m"
 
-def apply_op(op, a, b):
-    if type(a) == type(b):
-        return eval(f"a {op} b")
-    if type(a) is str or type(b) is str:
-        return eval(f"str(a) {op} str(b)")
-
-    return eval(f"a {op} b")
-
 def get_name_for_symbol_value(value):
     for sname in symbol_names:
         search = eval(sname)
@@ -843,13 +843,18 @@ def get_name_for_symbol_value(value):
 
 def parse_model_key(key):
     key = str(key)
-    name, args = key.split("(")
+    parts = key.split("(")
+    if len(parts) == 1:
+        return key, None
+    name, args = parts
     args = args[:-1].split(", ")
 
     return name, args
 
 def format_model_key(key):
     name, args = parse_model_key(key)
+    if args is None:
+        return name
     return f"{name}({', '.join(args)})"
 
 def getchar():
@@ -922,7 +927,10 @@ def z3_generate(ctx: Context) -> str:
 
     # generate predicates
     letters = "abcdefghijklmnopqrstuvwxyz"
-    for name, arity in sorted(ctx.ast.predicates):
+    for name, arity in sorted(ctx.ast.atoms):
+        if arity == 0:
+            lines.append(f"{python_excape_name(name)} = Bool('{name}')")
+            continue
         str_params = ", ".join([f"str({i})" for i in letters[:arity]])
         params = ", ".join(letters[:arity])
         signature = f"def {name}({params}):"
