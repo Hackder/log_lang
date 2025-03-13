@@ -381,40 +381,40 @@ class Tokenizer:
 
 
 @dataclass
-class Node:
+class NodeBase:
     token: Token
 
 
 @dataclass
-class IdentifierNode(Node):
+class IdentifierNode(NodeBase):
     dynamic_param: bool = False
     pass
 
 
 @dataclass
-class BinOpNode(Node):
+class BinOpNode(NodeBase):
     left: Node
     right: Node
 
 
 @dataclass
-class UnaryOpNode(Node):
+class UnaryOpNode(NodeBase):
     child: Node
 
 
 @dataclass
-class BoolNode(Node):
+class BoolNode(NodeBase):
     value: bool
 
 
 @dataclass
-class DirectiveNode(Node):
+class DirectiveNode(NodeBase):
     params: list[Node]
     pass
 
 
 @dataclass
-class WhereClauseNode(Node):
+class WhereClauseNode(NodeBase):
     condition: Node
     child: Node
 
@@ -428,7 +428,7 @@ class QuantifierKind(Enum):
 
 
 @dataclass
-class QuantifierNode(Node):
+class QuantifierNode(NodeBase):
     kind: QuantifierKind
     variables: list[IdentifierNode]
     directive: Node | None
@@ -436,13 +436,26 @@ class QuantifierNode(Node):
 
 
 @dataclass
-class PredicateNode(Node):
+class PredicateNode(NodeBase):
     params: list[IdentifierNode]
 
 
 @dataclass
-class AtomicFormula(Node):
+class AtomicFormula(NodeBase):
     pass
+
+
+Node = (
+    IdentifierNode
+    | BinOpNode
+    | UnaryOpNode
+    | BoolNode
+    | DirectiveNode
+    | WhereClauseNode
+    | QuantifierNode
+    | PredicateNode
+    | AtomicFormula
+)
 
 
 @dataclass
@@ -750,7 +763,7 @@ def node_to_formal_string(node: Node, syntax: Syntax) -> str:
     match node:
         case IdentifierNode(token, _):
             return syntax(token)
-        case BoolNode(token, value):
+        case BoolNode(token, _):
             return syntax(token)
         case UnaryOpNode(token, child):
             return syntax(token) + node_to_formal_string(child, syntax)
@@ -775,7 +788,7 @@ def node_to_formal_string(node: Node, syntax: Syntax) -> str:
                 + ")"
             )
 
-        case QuantifierNode(token, kind, variables, directive, child):
+        case QuantifierNode(token, _, variables, directive, child):
             child_str = node_to_formal_string(child, syntax)
             if child_str[0] != "(":
                 child_str = f"({child_str})"
@@ -789,8 +802,6 @@ def node_to_formal_string(node: Node, syntax: Syntax) -> str:
             return f"{syntax(name)}({', '.join([node_to_formal_string(param, syntax) for param in params])})"
         case AtomicFormula(token):
             return syntax(token)
-        case _:
-            raise Exception("Unsupported node")
 
 
 @dataclass
@@ -1145,23 +1156,16 @@ def tableau_node_to_formal_string(node: TableauNode, syntax: Syntax) -> str:
     return f"{prefix} {node_to_formal_string(node.node, syntax)}"
 
 
-@dataclass
-class TableauRule:
-    pass
-
-
 def tableau_rule_to_formal_string(rule: TableauRule, syntax: Syntax) -> str:
     match rule:
         case TableauAlphaRule(node) as rule:
             return f"({node.id}) Alpha {tableau_node_to_formal_string(node, syntax)}  (from: {node.parent_id()})"
         case TableauBetaRule(left, right):
             return f"({left.id}) Beta {tableau_node_to_formal_string(left, syntax)} {tableau_node_to_formal_string(right, syntax)}"
-        case _:
-            raise Exception("Invalid rule")
 
 
 @dataclass
-class TableauAlphaRule(TableauRule):
+class TableauAlphaRule:
     node: TableauNode
 
     def parent_id(self) -> int:
@@ -1169,7 +1173,7 @@ class TableauAlphaRule(TableauRule):
 
 
 @dataclass
-class TableauBetaRule(TableauRule):
+class TableauBetaRule:
     left: TableauNode
     right: TableauNode
 
@@ -1178,14 +1182,15 @@ class TableauBetaRule(TableauRule):
         return self.left.parent_id()
 
 
+TableauRule = TableauAlphaRule | TableauBetaRule
+
+
 def tableau_rule_get_nodes(rule: TableauRule) -> list[TableauNode]:
     match rule:
         case TableauAlphaRule(node):
             return [node]
         case TableauBetaRule(left, right):
             return [left, right]
-        case _:
-            raise Exception("Invalid rule")
 
 
 def tableau_preprocess(node: Node) -> Node:
@@ -1254,7 +1259,7 @@ def tableau_node_expand(node: TableauNode) -> list[TableauRule]:
         case (_, PredicateNode(_, _)):
             return []
         case other:
-            raise Exception(f"Unsupported node: {other}")
+            raise Exception(f"Unsupported node for tableau expansion: {other}")
 
 
 @dataclass
