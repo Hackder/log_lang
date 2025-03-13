@@ -388,7 +388,6 @@ class NodeBase:
 @dataclass
 class IdentifierNode(NodeBase):
     dynamic_param: bool = False
-    pass
 
 
 @dataclass
@@ -410,7 +409,6 @@ class BoolNode(NodeBase):
 @dataclass
 class DirectiveNode(NodeBase):
     params: list[Node]
-    pass
 
 
 @dataclass
@@ -802,6 +800,40 @@ def node_to_formal_string(node: Node, syntax: Syntax) -> str:
             return f"{syntax(name)}({', '.join([node_to_formal_string(param, syntax) for param in params])})"
         case AtomicFormula(token):
             return syntax(token)
+
+
+AstTransformer = Callable[[Node], Node]
+
+
+def node_transform(node: Node, transformers: list[AstTransformer]) -> Node:
+    for transformer in transformers:
+        node = transformer(node)
+
+    match node:
+        case IdentifierNode(_, _):
+            return node
+        case BinOpNode(_, left, right) as bin_op:
+            bin_op.left = node_transform(left, transformers)
+            bin_op.right = node_transform(right, transformers)
+            return bin_op
+        case UnaryOpNode(_, child) as unary_op:
+            unary_op.child = node_transform(child, transformers)
+            return unary_op
+        case BoolNode(_, _):
+            return node
+        case DirectiveNode(_, _):
+            return node
+        case WhereClauseNode(_, condition, child) as where:
+            where.condition = node_transform(condition, transformers)
+            where.child = node_transform(child, transformers)
+            return where
+        case QuantifierNode(_, _, _, _, child) as quantifier:
+            quantifier.child = node_transform(child, transformers)
+            return quantifier
+        case PredicateNode(_, _):
+            return node
+        case AtomicFormula(_):
+            return node
 
 
 @dataclass
