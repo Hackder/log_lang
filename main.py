@@ -1,7 +1,15 @@
+from __future__ import annotations
+
+import copy
 import os
 import sys
 from dataclasses import dataclass
 from enum import Enum
+from typing import Callable
+
+ANSII_FG_GREEN = "\033[92m"
+ANSII_FG_RED = "\033[91m"
+ANSII_RESET = "\033[0m"
 
 
 class TokenKind(Enum):
@@ -30,7 +38,7 @@ class TokenKind(Enum):
     NOT = 100
     AND = 101
     OR = 102
-    LEFT_IMPLIES = 102
+    LEFT_IMPLIES = 103
     RIGHT_IMPLIES = 104
     EQUIV = 105
 
@@ -283,7 +291,7 @@ class Tokenizer:
 
                     if self.__peek_char() == ">":
                         self.position += 1
-                        return Token(TokenKind.RIGHT_IMPLIES, "->")
+                        return Token(TokenKind.EQUIV, "<->")
 
                     return Token(TokenKind.LEFT_IMPLIES, "<-")
 
@@ -665,6 +673,126 @@ class Parser:
         return Ast(self._atoms, self._symbols, nodes)
 
 
+Syntax = Callable[[Token], str]
+
+
+def syntax_ascii(token: Token) -> str:
+    match token.kind:
+        case TokenKind.INVALID:
+            return "??"
+        case TokenKind.IDENTIFIER:
+            return token.source
+        case TokenKind.TRUE:
+            return "True"
+        case TokenKind.FALSE:
+            return "False"
+        case TokenKind.LEFT_PAREN:
+            return "("
+        case TokenKind.RIGHT_PAREN:
+            return ")"
+        case TokenKind.COMMA:
+            return ","
+        case TokenKind.COLON:
+            return ":"
+        case TokenKind.COMMENT:
+            return "//"
+        case TokenKind.EQUALS:
+            return "=="
+        case TokenKind.NOT_EQUALS:
+            return "!="
+        case TokenKind.GREATER:
+            return ">"
+        case TokenKind.GREATER_OR_EQUAL:
+            return ">="
+        case TokenKind.LESS:
+            return "<"
+        case TokenKind.LESS_OR_EQUAL:
+            return "<="
+        case TokenKind.PLUS:
+            return "+"
+        case TokenKind.MINUS:
+            return "-"
+        case TokenKind.MULTIPLY:
+            return "*"
+        case TokenKind.DIVIDE:
+            return "/"
+        case TokenKind.MODULO:
+            return "%"
+        case TokenKind.EXPONENT:
+            return "**"
+        case TokenKind.NOT:
+            return "!"
+        case TokenKind.AND:
+            return "&&"
+        case TokenKind.OR:
+            return "||"
+        case TokenKind.LEFT_IMPLIES:
+            return "<-"
+        case TokenKind.RIGHT_IMPLIES:
+            return "->"
+        case TokenKind.EQUIV:
+            return "<->"
+        case TokenKind.FOR_ALL:
+            return "@forall"
+        case TokenKind.EXISTS:
+            return "@exists"
+        case TokenKind.WHERE:
+            return "@where"
+        case TokenKind.IN:
+            return "in"
+        case TokenKind.DIRECTIVE:
+            return token.source
+        case TokenKind.EOF:
+            return ""
+
+
+def node_to_formal_string(node: Node, syntax: Syntax) -> str:
+    match node:
+        case IdentifierNode(token, _):
+            return syntax(token)
+        case BoolNode(token, value):
+            return syntax(token)
+        case UnaryOpNode(token, child):
+            return syntax(token) + node_to_formal_string(child, syntax)
+        case BinOpNode(token, left, right):
+            return (
+                "("
+                + node_to_formal_string(left, syntax)
+                + " "
+                + syntax(token)
+                + " "
+                + node_to_formal_string(right, syntax)
+                + ")"
+            )
+        case DirectiveNode(token, params):
+            if len(params) == 0:
+                return syntax(token)
+
+            return (
+                syntax(token)
+                + "("
+                + ", ".join([node_to_formal_string(param, syntax) for param in params])
+                + ")"
+            )
+
+        case QuantifierNode(token, kind, variables, directive, child):
+            child_str = node_to_formal_string(child, syntax)
+            if child_str[0] != "(":
+                child_str = f"({child_str})"
+
+            if directive is not None:
+                return f"{syntax(token)} {', '.join([node_to_formal_string(var, syntax) for var in variables])} in {node_to_formal_string(directive, syntax)}{child_str}"
+            return f"{syntax(token)} {', '.join([node_to_formal_string(var, syntax) for var in variables])} {child_str}"
+        case WhereClauseNode(token, condition, child):
+            return f"{syntax(token)}({node_to_formal_string(condition, syntax)}) ({node_to_formal_string(child, syntax)})"
+        case PredicateNode(name, params):
+            return f"{syntax(name)}({', '.join([node_to_formal_string(param, syntax) for param in params])})"
+        case AtomicFormula(token):
+            return syntax(token)
+        case _:
+            raise Exception("Unsupported node")
+
+
 @dataclass
 class Context:
     ast: Ast
@@ -967,6 +1095,335 @@ def z3_generate(ctx: Context) -> str:
     return result.strip() + "\n"
 
 
+class SharedCounter:
+    value: int
+
+    def __init__(self):
+        self.value = 0
+
+    def next(self) -> int:
+        self.value += 1
+        return self.value
+
+
+@dataclass
+class TableauNode:
+    value: bool
+    node: Node
+    parent: TableauNode | None = None
+    id: int = -1
+    # The nodes that are present in beta rules,
+    # are duplicated in alpha rules to make my life easier. So we don't print them twice.
+    hide_as_alpha: bool = False
+
+    def parent_id(self) -> int:
+        if self.parent is not None:
+            return self.parent.id
+        return -1
+
+    def with_id(self, id: int | SharedCounter) -> TableauNode:
+        if isinstance(id, SharedCounter):
+            id = id.next()
+        self.id = id
+        return self
+
+    def with_new_id(self, id: int | SharedCounter) -> TableauNode:
+        if self.id != -1:
+            return self
+
+        if isinstance(id, SharedCounter):
+            id = id.next()
+        self.id = id
+        return self
+
+
+def tableau_node_to_formal_string(node: TableauNode, syntax: Syntax) -> str:
+    if node.value:
+        prefix = "T"
+    else:
+        prefix = "F"
+    return f"{prefix} {node_to_formal_string(node.node, syntax)}"
+
+
+@dataclass
+class TableauRule:
+    pass
+
+
+def tableau_rule_to_formal_string(rule: TableauRule, syntax: Syntax) -> str:
+    match rule:
+        case TableauAlphaRule(node) as rule:
+            return f"({node.id}) Alpha {tableau_node_to_formal_string(node, syntax)}  (from: {node.parent_id()})"
+        case TableauBetaRule(left, right):
+            return f"({left.id}) Beta {tableau_node_to_formal_string(left, syntax)} {tableau_node_to_formal_string(right, syntax)}"
+        case _:
+            raise Exception("Invalid rule")
+
+
+@dataclass
+class TableauAlphaRule(TableauRule):
+    node: TableauNode
+
+    def parent_id(self) -> int:
+        return self.node.parent_id()
+
+
+@dataclass
+class TableauBetaRule(TableauRule):
+    left: TableauNode
+    right: TableauNode
+
+    def parent_id(self) -> int:
+        assert self.left.parent_id() == self.right.parent_id()
+        return self.left.parent_id()
+
+
+def tableau_rule_get_nodes(rule: TableauRule) -> list[TableauNode]:
+    match rule:
+        case TableauAlphaRule(node):
+            return [node]
+        case TableauBetaRule(left, right):
+            return [left, right]
+        case _:
+            raise Exception("Invalid rule")
+
+
+def tableau_preprocess(node: Node) -> Node:
+    match node:
+        case BinOpNode(Token(TokenKind.LEFT_IMPLIES, _), left, right):
+            left = tableau_preprocess(left)
+            right = tableau_preprocess(right)
+            return BinOpNode(Token(TokenKind.RIGHT_IMPLIES, "->"), right, left)
+        case BinOpNode(Token(TokenKind.EQUIV, _), left, right):
+            left = tableau_preprocess(left)
+            right = tableau_preprocess(right)
+            return BinOpNode(
+                Token(TokenKind.AND, "&&"),
+                BinOpNode(Token(TokenKind.RIGHT_IMPLIES, "->"), left, right),
+                BinOpNode(Token(TokenKind.RIGHT_IMPLIES, "->"), right, left),
+            )
+        case BinOpNode(token, left, right):
+            return BinOpNode(token, tableau_preprocess(left), tableau_preprocess(right))
+        case UnaryOpNode(token, child):
+            return UnaryOpNode(token, tableau_preprocess(child))
+        case _:
+            return node
+
+
+def tableau_node_expand(node: TableauNode) -> list[TableauRule]:
+    match node.value, node.node:
+        case (True, BinOpNode(Token(TokenKind.AND, _), left, right)):
+            return [
+                TableauAlphaRule(TableauNode(True, left, node)),
+                TableauAlphaRule(TableauNode(True, right, node)),
+            ]
+        case (False, BinOpNode(Token(TokenKind.OR, _), left, right)):
+            return [
+                TableauAlphaRule(TableauNode(False, left, node)),
+                TableauAlphaRule(TableauNode(False, right, node)),
+            ]
+        case (False, BinOpNode(Token(TokenKind.RIGHT_IMPLIES, _), left, right)):
+            return [
+                TableauAlphaRule(TableauNode(True, left, node)),
+                TableauAlphaRule(TableauNode(False, right, node)),
+            ]
+        case (True, UnaryOpNode(Token(TokenKind.NOT, _), child)):
+            return [TableauAlphaRule(TableauNode(False, child, node))]
+        case (False, UnaryOpNode(Token(TokenKind.NOT, _), child)):
+            return [TableauAlphaRule(TableauNode(True, child, node))]
+        case (False, BinOpNode(Token(TokenKind.AND, _), left, right)):
+            return [
+                TableauBetaRule(
+                    TableauNode(False, left, node), TableauNode(False, right, node)
+                )
+            ]
+        case (True, BinOpNode(Token(TokenKind.OR, _), left, right)):
+            return [
+                TableauBetaRule(
+                    TableauNode(True, left, node), TableauNode(True, right, node)
+                )
+            ]
+        case (True, BinOpNode(Token(TokenKind.RIGHT_IMPLIES, _), left, right)):
+            return [
+                TableauBetaRule(
+                    TableauNode(False, left, node), TableauNode(True, right, node)
+                )
+            ]
+        case (_, AtomicFormula(_)):
+            return []
+        case (_, PredicateNode(_, _)):
+            return []
+        case other:
+            raise Exception(f"Unsupported node: {other}")
+
+
+@dataclass
+class Tableau:
+    rules: list[TableauAlphaRule]
+    closed: tuple[TableauNode, TableauNode] | None
+    beta_rule: TableauBetaRule | None
+    beta_left: Tableau | None
+    beta_right: Tableau | None
+
+
+def tableau_print(tableau: Tableau, syntax: Syntax, indentation=0):
+    indent = " " * indentation * 4
+    for rule in tableau.rules:
+        if rule.node.hide_as_alpha:
+            continue
+        print(indent + tableau_rule_to_formal_string(rule, syntax))
+
+    if tableau.closed is not None:
+        print(
+            indent + ANSII_FG_GREEN + "Closed",
+            # tableau_node_to_formal_string(tableau.closed[0], syntax),
+            f"({tableau.closed[0].id})",
+            # tableau_node_to_formal_string(tableau.closed[1], syntax),
+            f"({tableau.closed[1].id})",
+            ANSII_RESET,
+        )
+        return
+
+    if (
+        tableau.beta_rule is not None
+        and tableau.beta_left is not None
+        and tableau.beta_right is not None
+    ):
+        print(
+            indent
+            + f"({tableau.beta_rule.left.id}) Beta "
+            + tableau_node_to_formal_string(tableau.beta_rule.left, syntax_ascii)
+            + f"  (from: {tableau.beta_rule.left.parent_id()})"
+        )
+        tableau_print(tableau.beta_left, syntax, indentation + 1)
+        print(
+            indent
+            + f"({tableau.beta_rule.right.id}) Beta "
+            + tableau_node_to_formal_string(tableau.beta_rule.right, syntax_ascii)
+            + f"  (from: {tableau.beta_rule.right.parent_id()})"
+        )
+        tableau_print(tableau.beta_right, syntax, indentation + 1)
+        return
+
+    # The tableau was left open
+    print(indent + ANSII_FG_RED + "Open" + ANSII_RESET)
+
+
+def find_conflicting_node(
+    node: TableauNode, seen_formulas: dict[str, TableauNode]
+) -> TableauNode | None:
+    inverse = copy.copy(node)
+    inverse.value = not inverse.value
+    inverse_str = tableau_node_to_formal_string(inverse, syntax_ascii)
+
+    if inverse_str in seen_formulas:
+        return seen_formulas[inverse_str]
+
+    return None
+
+
+def tableau_generate(
+    nodes: list[TableauNode],
+    pending_beta_rules: list[TableauBetaRule],
+    seen_formulas: dict[str, TableauNode],
+    id_source: SharedCounter,
+) -> Tableau:
+    # This has to be a shallow copy
+    nodes = [copy.copy(node) for node in nodes]
+
+    alpha_rules: list[TableauAlphaRule] = []
+
+    for node in nodes:
+        node = node.with_new_id(id_source)
+        alpha_rules.append(TableauAlphaRule(node))
+
+        if conflicting_node := find_conflicting_node(node, seen_formulas):
+            return Tableau(alpha_rules, (node, conflicting_node), None, None, None)
+
+        seen_formulas[tableau_node_to_formal_string(node, syntax_ascii)] = node
+
+    beta_rules: list[TableauBetaRule] = [copy.copy(rule) for rule in pending_beta_rules]
+
+    # Expand all alpha rules
+    while nodes:
+        node = nodes.pop(0)
+        rules = tableau_node_expand(node)
+        for rule in rules:
+            match rule:
+                case TableauAlphaRule(node):
+                    node = node.with_id(id_source)
+                    nodes.append(node)
+                    alpha_rules.append(TableauAlphaRule(node))
+
+                    if conflicting_node := find_conflicting_node(node, seen_formulas):
+                        return Tableau(
+                            alpha_rules, (node, conflicting_node), None, None, None
+                        )
+
+                    seen_formulas[tableau_node_to_formal_string(node, syntax_ascii)] = (
+                        node
+                    )
+                case TableauBetaRule(_, _) as beta_rule:
+                    beta_rules.append(beta_rule)
+
+    # pick the firs beta rule
+    if len(beta_rules) == 0:
+        return Tableau(alpha_rules, None, None, None, None)
+
+    beta_rule = beta_rules.pop(0)
+    beta_rule.left = beta_rule.left.with_id(id_source)
+    beta_rule.left.hide_as_alpha = True
+    beta_rule.right = beta_rule.right.with_id(id_source)
+    beta_rule.right.hide_as_alpha = True
+
+    left_seen = copy.copy(seen_formulas)
+    left_tableau = tableau_generate([beta_rule.left], beta_rules, left_seen, id_source)
+
+    right_seen = copy.copy(seen_formulas)
+    right_tableau = tableau_generate(
+        [beta_rule.right], beta_rules, right_seen, id_source
+    )
+
+    return Tableau(alpha_rules, None, beta_rule, left_tableau, right_tableau)
+
+
+def tableau_prune_rec(tableau: Tableau, required_ids: set[int]):
+    if tableau.closed is not None:
+        required_ids.add(tableau.closed[0].id)
+        required_ids.add(tableau.closed[1].id)
+
+    if (
+        tableau.beta_rule is not None
+        and tableau.beta_left is not None
+        and tableau.beta_right is not None
+    ):
+        tableau_prune_rec(tableau.beta_left, required_ids)
+        tableau_prune_rec(tableau.beta_right, required_ids)
+
+    i = len(tableau.rules) - 1
+    while i >= 0:
+        rule = tableau.rules[i]
+
+        if rule.node.id not in required_ids:
+            tableau.rules.pop(i)
+        else:
+            required_ids.add(rule.parent_id())
+
+        i -= 1
+
+
+def tableau_run(expressions: list[Node]):
+    nodes = []
+    for expr in expressions:
+        expr = tableau_preprocess(expr)
+        print(node_to_formal_string(expr, syntax_ascii))
+        nodes.append(TableauNode(True, expr))
+    print("----------------")
+    tableau = tableau_generate(nodes, [], dict(), SharedCounter())
+    tableau_prune_rec(tableau, set())
+    tableau_print(tableau, syntax_ascii)
+
+
 def main():
     if len(sys.argv) != 3:
         print("Usage: python main.py <subcommand> <options>", file=sys.stderr)
@@ -992,14 +1449,16 @@ def main():
 
     ctx = Context(ast, [])
 
-    z3_code = z3_generate(ctx)
-
     if subcommand == "transpile":
+        z3_code = z3_generate(ctx)
         print(z3_code)
     elif subcommand == "solve":
+        z3_code = z3_generate(ctx)
         with open("loglang_out.py", "w") as f:
             f.write(z3_code)
         os.execvp("python3", ["python3", "loglang_out.py"])
+    elif subcommand == "tableau":
+        tableau_run(ast.expressions)
 
 
 if __name__ == "__main__":

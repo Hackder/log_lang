@@ -61,6 +61,18 @@
 //     s(cell_r * 3 + r1, cell_c * 4 + c1, n) ->
 //     !s(cell_r * 3 + r2, cell_c * 3 + c2, n)
 //   )
-// 
 
-A -> B
+(have(umbrella,today)→¬rainy(today))
+(wet(road,today)→(rainy(today)∨passed(cleaning_truck,road,today)))
+(weekend(today)→¬passed(cleaning_truck,road,today))
+((tuesday(today)→by_tram(today))∧((¬tuesday(today)∧¬weekend(today))→¬by_tram(today)))
+(by_tram(today)→¬have(umbrella,today))
+
+!((have(umbrella,today)∧wet(road,today))→¬weekend(today))
+
+
+
+// !((A→B)↔(¬A∨B))
+
+
+
