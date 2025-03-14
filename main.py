@@ -9,6 +9,8 @@ from typing import Callable
 
 ANSII_FG_GREEN = "\033[92m"
 ANSII_FG_RED = "\033[91m"
+ANSII_FG_CYAN = "\033[96m"
+ANSII_FG_BLUE = "\033[94m"
 ANSII_RESET = "\033[0m"
 
 
@@ -1170,6 +1172,7 @@ class SharedCounter:
 class TableauNode:
     value: bool
     node: Node
+    # Nodes without a parent are considered "assumptions"
     parent: TableauNode | None = None
     id: int = -1
     # The nodes that are present in beta rules,
@@ -1208,6 +1211,8 @@ def tableau_node_to_formal_string(node: TableauNode, syntax: Syntax) -> str:
 def tableau_rule_to_formal_string(rule: TableauRule, syntax: Syntax) -> str:
     match rule:
         case TableauAlphaRule(node) as rule:
+            if node.parent_id() == -1:
+                return f"{ANSII_FG_BLUE}({node.id}) Assumption {tableau_node_to_formal_string(node, syntax)}{ANSII_RESET}"
             return f"({node.id}) Alpha {tableau_node_to_formal_string(node, syntax)}  (from: {node.parent_id()})"
         case TableauBetaRule(left, right):
             return f"({left.id}) Beta {tableau_node_to_formal_string(left, syntax)} {tableau_node_to_formal_string(right, syntax)}"
@@ -1470,9 +1475,7 @@ def tableau_run(expressions: list[Node]):
     nodes = []
     for expr in expressions:
         expr = tableau_preprocess(expr)
-        print(node_to_formal_string(expr, syntax_ascii))
         nodes.append(TableauNode(True, expr))
-    print("----------------")
     tableau = tableau_generate(nodes, [], dict(), SharedCounter())
     tableau_prune_rec(tableau, set())
     tableau_print(tableau, syntax_ascii)
