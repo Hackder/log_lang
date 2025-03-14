@@ -757,7 +757,9 @@ def syntax_ascii(token: Token) -> str:
             return ""
 
 
-def node_to_formal_string(node: Node, syntax: Syntax) -> str:
+def node_to_formal_string(
+    node: Node, syntax: Syntax, _flattening_conj_disj=False
+) -> str:
     match node:
         case IdentifierNode(token, _):
             return syntax(token)
@@ -766,15 +768,30 @@ def node_to_formal_string(node: Node, syntax: Syntax) -> str:
         case UnaryOpNode(token, child):
             return syntax(token) + node_to_formal_string(child, syntax)
         case BinOpNode(token, left, right):
+            conj_or_disj = token.kind == TokenKind.AND or token.kind == TokenKind.OR
+            if conj_or_disj and _flattening_conj_disj:
+                return (
+                    node_to_formal_string(left, syntax, _flattening_conj_disj=True)
+                    + " "
+                    + syntax(token)
+                    + " "
+                    + node_to_formal_string(right, syntax, _flattening_conj_disj=True)
+                )
+
             return (
                 "("
-                + node_to_formal_string(left, syntax)
+                + node_to_formal_string(
+                    left, syntax, _flattening_conj_disj=conj_or_disj
+                )
                 + " "
                 + syntax(token)
                 + " "
-                + node_to_formal_string(right, syntax)
+                + node_to_formal_string(
+                    right, syntax, _flattening_conj_disj=conj_or_disj
+                )
                 + ")"
             )
+
         case DirectiveNode(token, params):
             if len(params) == 0:
                 return syntax(token)
