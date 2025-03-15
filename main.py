@@ -1185,6 +1185,7 @@ class TableauNode:
         return -1
 
     def with_id(self, id: int | SharedCounter) -> TableauNode:
+        assert self.id == -1
         if isinstance(id, SharedCounter):
             id = id.next()
         self.id = id
@@ -1234,6 +1235,9 @@ class TableauBetaRule:
     def parent_id(self) -> int:
         assert self.left.parent_id() == self.right.parent_id()
         return self.left.parent_id()
+
+    def clone(self) -> TableauBetaRule:
+        return TableauBetaRule(copy.copy(self.left), copy.copy(self.right))
 
 
 TableauRule = TableauAlphaRule | TableauBetaRule
@@ -1319,10 +1323,11 @@ def tableau_node_expand(node: TableauNode) -> list[TableauRule]:
 @dataclass
 class Tableau:
     rules: list[TableauAlphaRule]
-    closed: tuple[TableauNode, TableauNode] | None
+    closed: tuple[TableauNode, TableauNode, str] | None
     beta_rule: TableauBetaRule | None
     beta_left: Tableau | None
     beta_right: Tableau | None
+    depth: int = 0
 
 
 def tableau_print(tableau: Tableau, syntax: Syntax, indentation=0):
@@ -1386,9 +1391,29 @@ def tableau_generate(
     pending_beta_rules: list[TableauBetaRule],
     seen_formulas: dict[str, TableauNode],
     id_source: SharedCounter,
+    generate_cache: dict[str, Tableau],
 ) -> Tableau:
+    key = str(
+        (
+            sorted(
+                [tableau_node_to_formal_string(node, syntax_ascii) for node in nodes]
+            ),
+            sorted(
+                [
+                    tableau_rule_to_formal_string(rule, syntax_ascii)
+                    for rule in pending_beta_rules
+                ]
+            ),
+            sorted(seen_formulas.keys()),
+        )
+    )
+
+    if key in generate_cache:
+        # print("cache hit")
+        return generate_cache[key]
+
     # This has to be a shallow copy
-    nodes = [copy.copy(node) for node in nodes]
+    # nodes = [copy.copy(node) for node in nodes]
 
     alpha_rules: list[TableauAlphaRule] = []
 
@@ -1397,7 +1422,7 @@ def tableau_generate(
         alpha_rules.append(TableauAlphaRule(node))
 
         if conflicting_node := find_conflicting_node(node, seen_formulas):
-            return Tableau(alpha_rules, (node, conflicting_node), None, None, None)
+            return Tableau(alpha_rules, (node, conflicting_node, "A"), None, None, None)
 
         seen_formulas[tableau_node_to_formal_string(node, syntax_ascii)] = node
 
@@ -1416,7 +1441,7 @@ def tableau_generate(
 
                     if conflicting_node := find_conflicting_node(node, seen_formulas):
                         return Tableau(
-                            alpha_rules, (node, conflicting_node), None, None, None
+                            alpha_rules, (node, conflicting_node, "B"), None, None, None
                         )
 
                     seen_formulas[tableau_node_to_formal_string(node, syntax_ascii)] = (
@@ -1429,21 +1454,38 @@ def tableau_generate(
     if len(beta_rules) == 0:
         return Tableau(alpha_rules, None, None, None, None)
 
-    beta_rule = beta_rules.pop(0)
-    beta_rule.left = beta_rule.left.with_id(id_source)
-    beta_rule.left.hide_as_alpha = True
-    beta_rule.right = beta_rule.right.with_id(id_source)
-    beta_rule.right.hide_as_alpha = True
+    min_tableau = None
+    for i in range(len(beta_rules)):
+        new_beta_rules = [x.clone() for x in beta_rules]
+        beta_rule = new_beta_rules.pop(i)
 
-    left_seen = copy.copy(seen_formulas)
-    left_tableau = tableau_generate([beta_rule.left], beta_rules, left_seen, id_source)
+        beta_rule.left = beta_rule.left.with_id(id_source)
+        beta_rule.left.hide_as_alpha = True
+        beta_rule.right = beta_rule.right.with_id(id_source)
+        beta_rule.right.hide_as_alpha = True
 
-    right_seen = copy.copy(seen_formulas)
-    right_tableau = tableau_generate(
-        [beta_rule.right], beta_rules, right_seen, id_source
-    )
+        left_seen = copy.copy(seen_formulas)
+        left_tableau = tableau_generate(
+            [beta_rule.left], new_beta_rules, left_seen, id_source, generate_cache
+        )
 
-    return Tableau(alpha_rules, None, beta_rule, left_tableau, right_tableau)
+        right_seen = copy.copy(seen_formulas)
+        right_tableau = tableau_generate(
+            [beta_rule.right], new_beta_rules, right_seen, id_source, generate_cache
+        )
+
+        depth = max(left_tableau.depth, right_tableau.depth) + 1
+
+        if min_tableau is None or depth < min_tableau.depth:
+            min_tableau = Tableau(
+                alpha_rules, None, beta_rule, left_tableau, right_tableau, depth
+            )
+
+    assert min_tableau is not None
+
+    generate_cache[key] = min_tableau
+
+    return min_tableau
 
 
 def tableau_prune_rec(tableau: Tableau, required_ids: set[int]):
@@ -1471,13 +1513,31 @@ def tableau_prune_rec(tableau: Tableau, required_ids: set[int]):
         i -= 1
 
 
+def tableau_relable_rec(tableau: Tableau, id_source: SharedCounter):
+    for rule in tableau.rules:
+        if not rule.node.hide_as_alpha:
+            rule.node.id = id_source.next()
+
+    if (
+        tableau.beta_rule is not None
+        and tableau.beta_left is not None
+        and tableau.beta_right is not None
+    ):
+        tableau.beta_rule.left.id = id_source.next()
+        tableau.beta_rule.right.id = id_source.next()
+
+        tableau_relable_rec(tableau.beta_left, id_source)
+        tableau_relable_rec(tableau.beta_right, id_source)
+
+
 def tableau_run(expressions: list[Node]):
     nodes = []
     for expr in expressions:
         expr = tableau_preprocess(expr)
         nodes.append(TableauNode(True, expr))
-    tableau = tableau_generate(nodes, [], dict(), SharedCounter())
+    tableau = tableau_generate(nodes, [], dict(), SharedCounter(), dict())
     tableau_prune_rec(tableau, set())
+    tableau_relable_rec(tableau, SharedCounter())
     tableau_print(tableau, syntax_ascii)
 
 

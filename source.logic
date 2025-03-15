@@ -63,16 +63,25 @@
 //   )
 
 
-(have(umbrella,today)→¬rainy(today))
-(wet(road,today)→(rainy(today)∨passed(cleaning_truck,road,today)))
-(weekend(today)→¬passed(cleaning_truck,road,today))
-((tuesday(today)→by_tram(today))∧((¬tuesday(today)∧¬weekend(today))→¬by_tram(today)))
-(by_tram(today)→¬have(umbrella,today))
+jumper(Y) | hat(Y) | socks(Y) | scarf(Y)
+(thin(Y) <-> !thick(Y))
+wool(Y) | cotton(Y) | acrylic(Y)
+jumper(Y) -> (thick(Y) & !cotton(Y))
+(socks(Y) | scarf(Y)) -> !wool(Y)
+socks(Y) -> thin(Y)
+hat(Y) <-> scarf(Y)
 
-!((have(umbrella,today)∧wet(road,today))→¬weekend(today))
+!(thin(Y) -> !wool(Y))
+// !(jumper(Y) -> !hat(Y))
 
 
-//!((A→B)↔(¬A∨B))
+// !((A→B)↔(¬A∨B))
 
 
-
+// (have(umbrella,today)→¬rainy(today))
+// (wet(road,today)→(rainy(today)∨passed(cleaning_truck,road,today)))
+// (weekend(today)→¬passed(cleaning_truck,road,today))
+// ((tuesday(today)→by_tram(today))∧((¬tuesday(today)∧¬weekend(today))→¬by_tram(today)))
+// (by_tram(today)→¬have(umbrella,today))
+// 
+// !((have(umbrella,today)∧wet(road,today))→¬weekend(today))
