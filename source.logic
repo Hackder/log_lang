@@ -72,7 +72,7 @@ socks(Y) -> thin(Y)
 hat(Y) <-> scarf(Y)
 
 !(thin(Y) -> !wool(Y))
-// !(jumper(Y) -> !hat(Y))
+// (jumper(Y) -> !hat(Y))
 
 
 // !((A→B)↔(¬A∨B))

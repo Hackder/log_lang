@@ -686,10 +686,17 @@ class Parser:
         return Ast(self._atoms, self._symbols, nodes)
 
 
-Syntax = Callable[[Token], str]
+@dataclass
+class Syntax:
+    token_mapper: Callable[[Token], str]
+    flatten_conj_disj: bool = False
+
+    @staticmethod
+    def default() -> Syntax:
+        return Syntax(syntax_ascii_mapper, True)
 
 
-def syntax_ascii(token: Token) -> str:
+def syntax_ascii_mapper(token: Token) -> str:
     match token.kind:
         case TokenKind.INVALID:
             return "??"
@@ -736,9 +743,9 @@ def syntax_ascii(token: Token) -> str:
         case TokenKind.NOT:
             return "!"
         case TokenKind.AND:
-            return "&&"
+            return "&"
         case TokenKind.OR:
-            return "||"
+            return "|"
         case TokenKind.LEFT_IMPLIES:
             return "<-"
         case TokenKind.RIGHT_IMPLIES:
@@ -759,47 +766,118 @@ def syntax_ascii(token: Token) -> str:
             return ""
 
 
+def syntax_symbols_mapper(token: Token) -> str:
+    match token.kind:
+        case TokenKind.INVALID:
+            return "??"
+        case TokenKind.IDENTIFIER:
+            return token.source
+        case TokenKind.TRUE:
+            return "True"
+        case TokenKind.FALSE:
+            return "False"
+        case TokenKind.LEFT_PAREN:
+            return "("
+        case TokenKind.RIGHT_PAREN:
+            return ")"
+        case TokenKind.COMMA:
+            return ","
+        case TokenKind.COLON:
+            return ":"
+        case TokenKind.COMMENT:
+            return "//"
+        case TokenKind.EQUALS:
+            return "=="
+        case TokenKind.NOT_EQUALS:
+            return "!="
+        case TokenKind.GREATER:
+            return ">"
+        case TokenKind.GREATER_OR_EQUAL:
+            return ">="
+        case TokenKind.LESS:
+            return "<"
+        case TokenKind.LESS_OR_EQUAL:
+            return "<="
+        case TokenKind.PLUS:
+            return "+"
+        case TokenKind.MINUS:
+            return "-"
+        case TokenKind.MULTIPLY:
+            return "*"
+        case TokenKind.DIVIDE:
+            return "/"
+        case TokenKind.MODULO:
+            return "%"
+        case TokenKind.EXPONENT:
+            return "**"
+        case TokenKind.NOT:
+            return "¬"
+        case TokenKind.AND:
+            return "∧"
+        case TokenKind.OR:
+            return "∨"
+        case TokenKind.LEFT_IMPLIES:
+            return "←"
+        case TokenKind.RIGHT_IMPLIES:
+            return "→"
+        case TokenKind.EQUIV:
+            return "↔"
+        case TokenKind.FOR_ALL:
+            return "∀"
+        case TokenKind.EXISTS:
+            return "∃"
+        case TokenKind.WHERE:
+            return "@where"
+        case TokenKind.IN:
+            return "in"
+        case TokenKind.DIRECTIVE:
+            return token.source
+        case TokenKind.EOF:
+            return ""
+
+
 def node_to_formal_string(
     node: Node, syntax: Syntax, _flattening_conj_disj=False
 ) -> str:
     match node:
         case IdentifierNode(token, _):
-            return syntax(token)
+            return syntax.token_mapper(token)
         case BoolNode(token, _):
-            return syntax(token)
+            return syntax.token_mapper(token)
         case UnaryOpNode(token, child):
-            return syntax(token) + node_to_formal_string(child, syntax)
+            return syntax.token_mapper(token) + node_to_formal_string(child, syntax)
         case BinOpNode(token, left, right):
             conj_or_disj = token.kind == TokenKind.AND or token.kind == TokenKind.OR
             if conj_or_disj and _flattening_conj_disj:
                 return (
                     node_to_formal_string(left, syntax, _flattening_conj_disj=True)
                     + " "
-                    + syntax(token)
+                    + syntax.token_mapper(token)
                     + " "
                     + node_to_formal_string(right, syntax, _flattening_conj_disj=True)
                 )
 
+            should_flatten = conj_or_disj and syntax.flatten_conj_disj
             return (
                 "("
                 + node_to_formal_string(
-                    left, syntax, _flattening_conj_disj=conj_or_disj
+                    left, syntax, _flattening_conj_disj=should_flatten
                 )
                 + " "
-                + syntax(token)
+                + syntax.token_mapper(token)
                 + " "
                 + node_to_formal_string(
-                    right, syntax, _flattening_conj_disj=conj_or_disj
+                    right, syntax, _flattening_conj_disj=should_flatten
                 )
                 + ")"
             )
 
         case DirectiveNode(token, params):
             if len(params) == 0:
-                return syntax(token)
+                return syntax.token_mapper(token)
 
             return (
-                syntax(token)
+                syntax.token_mapper(token)
                 + "("
                 + ", ".join([node_to_formal_string(param, syntax) for param in params])
                 + ")"
@@ -811,14 +889,14 @@ def node_to_formal_string(
                 child_str = f"({child_str})"
 
             if directive is not None:
-                return f"{syntax(token)} {', '.join([node_to_formal_string(var, syntax) for var in variables])} in {node_to_formal_string(directive, syntax)}{child_str}"
-            return f"{syntax(token)} {', '.join([node_to_formal_string(var, syntax) for var in variables])} {child_str}"
+                return f"{syntax.token_mapper(token)} {', '.join([node_to_formal_string(var, syntax) for var in variables])} in {node_to_formal_string(directive, syntax)}{child_str}"
+            return f"{syntax.token_mapper(token)} {', '.join([node_to_formal_string(var, syntax) for var in variables])} {child_str}"
         case WhereClauseNode(token, condition, child):
-            return f"{syntax(token)}({node_to_formal_string(condition, syntax)}) ({node_to_formal_string(child, syntax)})"
+            return f"{syntax.token_mapper(token)}({node_to_formal_string(condition, syntax)}) ({node_to_formal_string(child, syntax)})"
         case PredicateNode(name, params):
-            return f"{syntax(name)}({', '.join([node_to_formal_string(param, syntax) for param in params])})"
+            return f"{syntax.token_mapper(name)}({', '.join([node_to_formal_string(param, syntax) for param in params])})"
         case AtomicFormula(token):
-            return syntax(token)
+            return syntax.token_mapper(token)
 
 
 AstTransformer = Callable[[Node], Node]
@@ -1356,14 +1434,14 @@ def tableau_print(tableau: Tableau, syntax: Syntax, indentation=0):
         print(
             indent
             + f"({tableau.beta_rule.left.id}) Beta "
-            + tableau_node_to_formal_string(tableau.beta_rule.left, syntax_ascii)
+            + tableau_node_to_formal_string(tableau.beta_rule.left, syntax)
             + f"  (from: {tableau.beta_rule.left.parent_id()})"
         )
         tableau_print(tableau.beta_left, syntax, indentation + 1)
         print(
             indent
             + f"({tableau.beta_rule.right.id}) Beta "
-            + tableau_node_to_formal_string(tableau.beta_rule.right, syntax_ascii)
+            + tableau_node_to_formal_string(tableau.beta_rule.right, syntax)
             + f"  (from: {tableau.beta_rule.right.parent_id()})"
         )
         tableau_print(tableau.beta_right, syntax, indentation + 1)
@@ -1378,7 +1456,7 @@ def find_conflicting_node(
 ) -> TableauNode | None:
     inverse = copy.copy(node)
     inverse.value = not inverse.value
-    inverse_str = tableau_node_to_formal_string(inverse, syntax_ascii)
+    inverse_str = tableau_node_to_formal_string(inverse, Syntax.default())
 
     if inverse_str in seen_formulas:
         return seen_formulas[inverse_str]
@@ -1396,11 +1474,14 @@ def tableau_generate(
     key = str(
         (
             sorted(
-                [tableau_node_to_formal_string(node, syntax_ascii) for node in nodes]
+                [
+                    tableau_node_to_formal_string(node, Syntax.default())
+                    for node in nodes
+                ]
             ),
             sorted(
                 [
-                    tableau_rule_to_formal_string(rule, syntax_ascii)
+                    tableau_rule_to_formal_string(rule, Syntax.default())
                     for rule in pending_beta_rules
                 ]
             ),
@@ -1424,7 +1505,7 @@ def tableau_generate(
         if conflicting_node := find_conflicting_node(node, seen_formulas):
             return Tableau(alpha_rules, (node, conflicting_node, "A"), None, None, None)
 
-        seen_formulas[tableau_node_to_formal_string(node, syntax_ascii)] = node
+        seen_formulas[tableau_node_to_formal_string(node, Syntax.default())] = node
 
     beta_rules: list[TableauBetaRule] = [copy.copy(rule) for rule in pending_beta_rules]
 
@@ -1444,9 +1525,9 @@ def tableau_generate(
                             alpha_rules, (node, conflicting_node, "B"), None, None, None
                         )
 
-                    seen_formulas[tableau_node_to_formal_string(node, syntax_ascii)] = (
-                        node
-                    )
+                    seen_formulas[
+                        tableau_node_to_formal_string(node, Syntax.default())
+                    ] = node
                 case TableauBetaRule(_, _) as beta_rule:
                     beta_rules.append(beta_rule)
 
@@ -1461,14 +1542,14 @@ def tableau_generate(
 
         beta_rule.left = beta_rule.left.with_id(id_source)
         beta_rule.left.hide_as_alpha = True
-        beta_rule.right = beta_rule.right.with_id(id_source)
-        beta_rule.right.hide_as_alpha = True
 
         left_seen = copy.copy(seen_formulas)
         left_tableau = tableau_generate(
             [beta_rule.left], new_beta_rules, left_seen, id_source, generate_cache
         )
 
+        beta_rule.right = beta_rule.right.with_id(id_source)
+        beta_rule.right.hide_as_alpha = True
         right_seen = copy.copy(seen_formulas)
         right_tableau = tableau_generate(
             [beta_rule.right], new_beta_rules, right_seen, id_source, generate_cache
@@ -1505,7 +1586,10 @@ def tableau_prune_rec(tableau: Tableau, required_ids: set[int]):
     while i >= 0:
         rule = tableau.rules[i]
 
-        if rule.node.id not in required_ids:
+        required = rule.node.id in required_ids
+        assumption = rule.node.parent_id() == -1
+
+        if not required and not assumption:
             tableau.rules.pop(i)
         else:
             required_ids.add(rule.parent_id())
@@ -1524,13 +1608,13 @@ def tableau_relable_rec(tableau: Tableau, id_source: SharedCounter):
         and tableau.beta_right is not None
     ):
         tableau.beta_rule.left.id = id_source.next()
-        tableau.beta_rule.right.id = id_source.next()
-
         tableau_relable_rec(tableau.beta_left, id_source)
+
+        tableau.beta_rule.right.id = id_source.next()
         tableau_relable_rec(tableau.beta_right, id_source)
 
 
-def tableau_run(expressions: list[Node]):
+def tableau_run(expressions: list[Node], syntax: Syntax):
     nodes = []
     for expr in expressions:
         expr = tableau_preprocess(expr)
@@ -1538,7 +1622,7 @@ def tableau_run(expressions: list[Node]):
     tableau = tableau_generate(nodes, [], dict(), SharedCounter(), dict())
     tableau_prune_rec(tableau, set())
     tableau_relable_rec(tableau, SharedCounter())
-    tableau_print(tableau, syntax_ascii)
+    tableau_print(tableau, syntax)
 
 
 def main():
@@ -1575,7 +1659,9 @@ def main():
             f.write(z3_code)
         os.execvp("python3", ["python3", "loglang_out.py"])
     elif subcommand == "tableau":
-        tableau_run(ast.expressions)
+        tableau_run(
+            ast.expressions, Syntax(syntax_ascii_mapper, flatten_conj_disj=False)
+        )
 
 
 if __name__ == "__main__":
