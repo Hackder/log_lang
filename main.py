@@ -1579,6 +1579,8 @@ def tableau_prune_rec(tableau: Tableau, required_ids: set[int]):
         and tableau.beta_left is not None
         and tableau.beta_right is not None
     ):
+        required_ids.add(tableau.beta_rule.left.id)
+        required_ids.add(tableau.beta_rule.right.id)
         tableau_prune_rec(tableau.beta_left, required_ids)
         tableau_prune_rec(tableau.beta_right, required_ids)
 
