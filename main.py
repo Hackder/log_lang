@@ -1736,7 +1736,7 @@ def tableau_run(expressions: list[Node], syntax: Syntax):
     tableau = tableau_generate(nodes, [], dict(), SharedCounter(), dict())
     tableau_prune_rec(tableau, set())
     tableau_relable_rec(tableau, SharedCounter())
-    tableau_print(tableau, syntax)
+    # tableau_print(tableau, syntax)
 
     tableau_json = tableau_serialize_json(tableau, syntax)
     print_json_online(tableau_json)
