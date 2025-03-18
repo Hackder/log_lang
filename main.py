@@ -1468,12 +1468,13 @@ def tableau_serialize_json(tableau: Tableau, syntax: Syntax) -> dict:
             elif t.beta_rule is not None:
                 child_type = "beta"
             else:
-                raise Exception("cannot serialize open tableau to json")
+                child_type = "openComplete"
+                # raise Exception("cannot serialize open tableau to json")
 
-        if rule.node.hide_as_alpha and (
-            child_type == "alpha" or child_type == "assumption"
-        ):
-            return rec(t, rules)
+        # if rule.node.hide_as_alpha and (
+        #     child_type == "alpha" or child_type == "assumption"
+        # ):
+        #     return rec(t, rules)
 
         if child_type == "assumption":
             return {
@@ -1518,21 +1519,41 @@ def tableau_serialize_json(tableau: Tableau, syntax: Syntax) -> dict:
             assert t.beta_left is not None
             assert t.beta_right is not None
             assert len(rules) == 0
+            if rule.parent_id() == -1:
+                references = []
+            else:
+                references = [str(rule.parent_id())]
+
             return {
                 "type": "beta",
                 "node": {
                     "id": rule.node.id,
                     "value": tableau_node_to_formal_string(rule.node, syntax),
-                    "references": [str(rule.parent_id())],
+                    "references": references,
                 },
                 "leftChild": rec(t.beta_left, copy.copy(t.beta_left.rules)),
                 "rightChild": rec(t.beta_right, copy.copy(t.beta_right.rules)),
+            }
+        elif child_type == "openComplete":
+            return {
+                "type": "openComplete",
+                "node": {
+                    "id": rule.node.id,
+                    "value": tableau_node_to_formal_string(rule.node, syntax),
+                    "references": [str(rule.parent_id())],
+                },
             }
         else:
             raise Exception("invalid child type")
 
     assert len(tableau.rules) > 0
-    return rec(tableau, copy.copy(tableau.rules))
+    res = rec(tableau, copy.copy(tableau.rules))
+    res["config"] = "Basic propositional"
+    return res
+
+def print_json_online(json_tableau: dict):
+    # print json as string on one line, no indentation, no spaces
+    print(json.dumps(json_tableau, separators=(',', ':')))
 
 
 def find_conflicting_node(
@@ -1653,10 +1674,12 @@ def tableau_generate(
     return min_tableau
 
 
-def tableau_prune_rec(tableau: Tableau, required_ids: set[int]):
+def tableau_prune_rec(tableau: Tableau, required_ids: set[int]) -> bool:
+    closed = False
     if tableau.closed is not None:
         required_ids.add(tableau.closed[0].id)
         required_ids.add(tableau.closed[1].id)
+        closed = True
 
     if (
         tableau.beta_rule is not None
@@ -1665,11 +1688,13 @@ def tableau_prune_rec(tableau: Tableau, required_ids: set[int]):
     ):
         required_ids.add(tableau.beta_rule.left.id)
         required_ids.add(tableau.beta_rule.right.id)
-        tableau_prune_rec(tableau.beta_left, required_ids)
-        tableau_prune_rec(tableau.beta_right, required_ids)
+        left_closed = tableau_prune_rec(tableau.beta_left, required_ids)
+        right_closed = tableau_prune_rec(tableau.beta_right, required_ids)
+
+        closed = (left_closed and right_closed) or closed
 
     i = len(tableau.rules) - 1
-    while i >= 0:
+    while i >= 0 and closed:
         rule = tableau.rules[i]
 
         required = rule.node.id in required_ids
@@ -1681,6 +1706,8 @@ def tableau_prune_rec(tableau: Tableau, required_ids: set[int]):
             required_ids.add(rule.parent_id())
 
         i -= 1
+
+    return closed
 
 
 def tableau_relable_rec(tableau: Tableau, id_source: SharedCounter):
@@ -1707,11 +1734,12 @@ def tableau_run(expressions: list[Node], syntax: Syntax):
         nodes.append(TableauNode(True, expr))
     nodes[-1].value = False
     tableau = tableau_generate(nodes, [], dict(), SharedCounter(), dict())
-    # tableau_prune_rec(tableau, set())
+    tableau_prune_rec(tableau, set())
     tableau_relable_rec(tableau, SharedCounter())
     tableau_print(tableau, syntax)
+
     tableau_json = tableau_serialize_json(tableau, syntax)
-    print(json.dumps(tableau_json, indent=2))
+    print_json_online(tableau_json)
 
 
 def main():
