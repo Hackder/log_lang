@@ -1747,6 +1747,7 @@ def main():
         print("Usage: python main.py <subcommand> <options>", file=sys.stderr)
         print("python3 main.py transpile <source_file>", file=sys.stderr)
         print("python3 main.py solve <source_file>", file=sys.stderr)
+        print("python3 main.py tableau <source_file>", file=sys.stderr)
         sys.exit(1)
 
     subcommand = sys.argv[1]
