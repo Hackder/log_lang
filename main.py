@@ -616,6 +616,8 @@ class Parser:
             child = self.__parse_atom()
         elif token.is_logical_unary_op():
             self.__advance()
+            if token.kind == TokenKind.MINUS:
+                token.kind = TokenKind.NOT
             child = UnaryOpNode(
                 token, self.__parse_logical_expression(token.priority_logical())
             )
