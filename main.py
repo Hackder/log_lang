@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import os
 import sys
 from dataclasses import dataclass
@@ -741,7 +742,7 @@ def syntax_ascii_mapper(token: Token) -> str:
         case TokenKind.EXPONENT:
             return "**"
         case TokenKind.NOT:
-            return "!"
+            return "-"
         case TokenKind.AND:
             return "&"
         case TokenKind.OR:
@@ -1451,6 +1452,89 @@ def tableau_print(tableau: Tableau, syntax: Syntax, indentation=0):
     print(indent + ANSII_FG_RED + "Open" + ANSII_RESET)
 
 
+def tableau_serialize_json(tableau: Tableau, syntax: Syntax) -> dict:
+    def rec(t: Tableau, rules: list[TableauAlphaRule]):
+        rule = rules.pop(0)
+
+        if len(rules) > 0:
+            assert rules[0].node.hide_as_alpha is False
+            if rules[0].parent_id() == -1:
+                child_type = "assumption"
+            else:
+                child_type = "alpha"
+        else:
+            if t.closed is not None:
+                child_type = "closed"
+            elif t.beta_rule is not None:
+                child_type = "beta"
+            else:
+                raise Exception("cannot serialize open tableau to json")
+
+        if rule.node.hide_as_alpha and (
+            child_type == "alpha" or child_type == "assumption"
+        ):
+            return rec(t, rules)
+
+        if child_type == "assumption":
+            return {
+                "type": "assumption",
+                "node": {
+                    "id": rule.node.id,
+                    "value": tableau_node_to_formal_string(rule.node, syntax),
+                    "references": [],
+                },
+                "child": rec(t, rules),
+            }
+        elif child_type == "alpha":
+            if rule.parent_id() == -1:
+                references = []
+            else:
+                references = [str(rule.parent_id())]
+            return {
+                "type": "alpha",
+                "node": {
+                    "id": rule.node.id,
+                    "value": tableau_node_to_formal_string(rule.node, syntax),
+                    "references": references,
+                },
+                "child": rec(t, rules),
+            }
+        elif child_type == "closed":
+            assert t.closed is not None
+            return {
+                "type": "closed",
+                "node": {
+                    "id": rule.node.id,
+                    "value": tableau_node_to_formal_string(rule.node, syntax),
+                    "references": [str(rule.parent_id())],
+                },
+                "closed": [
+                    str(t.closed[0].id),
+                    str(t.closed[1].id),
+                ],
+            }
+        elif child_type == "beta":
+            assert t.beta_rule is not None
+            assert t.beta_left is not None
+            assert t.beta_right is not None
+            assert len(rules) == 0
+            return {
+                "type": "beta",
+                "node": {
+                    "id": rule.node.id,
+                    "value": tableau_node_to_formal_string(rule.node, syntax),
+                    "references": [str(rule.parent_id())],
+                },
+                "leftChild": rec(t.beta_left, copy.copy(t.beta_left.rules)),
+                "rightChild": rec(t.beta_right, copy.copy(t.beta_right.rules)),
+            }
+        else:
+            raise Exception("invalid child type")
+
+    assert len(tableau.rules) > 0
+    return rec(tableau, copy.copy(tableau.rules))
+
+
 def find_conflicting_node(
     node: TableauNode, seen_formulas: dict[str, TableauNode]
 ) -> TableauNode | None:
@@ -1621,10 +1705,13 @@ def tableau_run(expressions: list[Node], syntax: Syntax):
     for expr in expressions:
         expr = tableau_preprocess(expr)
         nodes.append(TableauNode(True, expr))
+    nodes[-1].value = False
     tableau = tableau_generate(nodes, [], dict(), SharedCounter(), dict())
-    tableau_prune_rec(tableau, set())
+    # tableau_prune_rec(tableau, set())
     tableau_relable_rec(tableau, SharedCounter())
     tableau_print(tableau, syntax)
+    tableau_json = tableau_serialize_json(tableau, syntax)
+    print(json.dumps(tableau_json, indent=2))
 
 
 def main():

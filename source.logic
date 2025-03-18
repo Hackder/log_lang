@@ -71,11 +71,11 @@ jumper(Y) -> (thick(Y) & !cotton(Y))
 socks(Y) -> thin(Y)
 hat(Y) <-> scarf(Y)
 
-!(thin(Y) -> !wool(Y))
-// (jumper(Y) -> !hat(Y))
+(thin(Y) -> !wool(Y))
+// !(jumper(Y) -> !hat(Y))
 
 
-// !((A→B)↔(¬A∨B))
+//((A→B)↔(¬A∨B))
 
 
 // (have(umbrella,today)→¬rainy(today))
@@ -85,3 +85,10 @@ hat(Y) <-> scarf(Y)
 // (by_tram(today)→¬have(umbrella,today))
 // 
 // !((have(umbrella,today)∧wet(road,today))→¬weekend(today))
+
+// ((r(c)→t(c))∧¬(t(c)∨¬r(c)))
+
+// ((s(c)∨t(c))→(¬r(c)∧(¬s(c)→t(c))))
+
+// p(a) -> p(c)
+// ((p(a) | p(b)) -> p(c))
