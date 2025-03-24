@@ -63,15 +63,15 @@
 //   )
 
 
-jumper(Y) | hat(Y) | socks(Y) | scarf(Y)
-(thin(Y) <-> !thick(Y))
-wool(Y) | cotton(Y) | acrylic(Y)
-jumper(Y) -> (thick(Y) & !cotton(Y))
-(socks(Y) | scarf(Y)) -> !wool(Y)
-socks(Y) -> thin(Y)
-hat(Y) <-> scarf(Y)
-
-(thin(Y) -> !wool(Y))
+// jumper(Y) | hat(Y) | socks(Y) | scarf(Y)
+// (thin(Y) <-> !thick(Y))
+// wool(Y) | cotton(Y) | acrylic(Y)
+// jumper(Y) -> (thick(Y) & !cotton(Y))
+// (socks(Y) | scarf(Y)) -> !wool(Y)
+// socks(Y) -> thin(Y)
+// hat(Y) <-> scarf(Y)
+// 
+// (thin(Y) -> !wool(Y))
 // !(jumper(Y) -> !hat(Y))
 
 
@@ -92,3 +92,14 @@ hat(Y) <-> scarf(Y)
 
 // p(a) -> p(c)
 // ((p(a) | p(b)) -> p(c))
+
+Kim | Jim | Sarah
+
+Kim -> !Sarah
+
+Jim -> Kim
+
+!Jim -> !Sarah
+
+
+

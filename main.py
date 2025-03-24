@@ -37,6 +37,7 @@ class TokenKind(Enum):
     DIVIDE = 18
     MODULO = 19
     EXPONENT = 20
+    NEWLINE = 21
 
     NOT = 100
     AND = 101
@@ -178,9 +179,13 @@ class Tokenizer:
             return None
         return self.source[self.position]
 
-    def __skip_whitespace(self):
+    def __skip_whitespace(self) -> bool:
+        seen_newline = False
         while self.position < len(self.source) and self.source[self.position].isspace():
+            if self.source[self.position] == "\n":
+                seen_newline = True
             self.position += 1
+        return seen_newline
 
     def __read_identifier(self) -> str:
         start = self.position
@@ -194,7 +199,10 @@ class Tokenizer:
         return self.source[start : self.position]
 
     def next_token(self) -> Token:
-        self.__skip_whitespace()
+        seen_newline = self.__skip_whitespace()
+        if seen_newline:
+            return Token(TokenKind.NEWLINE, "\n")
+
         if self.position >= len(self.source):
             return Token(TokenKind.EOF, "")
 
@@ -608,6 +616,10 @@ class Parser:
 
     def __parse_logical_expression(self, current_priority=0) -> Node:
         token = self.__peek()
+        while token.kind == TokenKind.NEWLINE:
+            self.__advance()
+            token = self.__peek()
+
         if token.is_quantifier():
             child = self.__parse_quantifier()
         elif token.kind == TokenKind.WHERE:
@@ -624,6 +636,10 @@ class Parser:
         elif token.kind == TokenKind.LEFT_PAREN:
             self.__advance()
             child = self.__parse_logical_expression(0)
+
+            while self.__peek().kind == TokenKind.NEWLINE:
+                self.__advance()
+
             if self.__peek().kind != TokenKind.RIGHT_PAREN:
                 raise Exception("Expected right paren")
             self.__advance()
@@ -645,6 +661,11 @@ class Parser:
 
     def __parse_expression(self, current_priority=0) -> Node:
         token = self.__peek()
+
+        while token.kind == TokenKind.NEWLINE:
+            self.__advance()
+            token = self.__peek()
+
         if token.kind == TokenKind.IDENTIFIER:
             self.__advance()
             child = IdentifierNode(token)
@@ -686,6 +707,9 @@ class Parser:
         nodes = []
         while self.__peek().kind != TokenKind.EOF:
             nodes.append(self.__parse_logical_expression())
+            while self.__peek().kind == TokenKind.NEWLINE:
+                self.__advance()
+
         return Ast(self._atoms, self._symbols, nodes)
 
 
@@ -743,6 +767,8 @@ def syntax_ascii_mapper(token: Token) -> str:
             return "%"
         case TokenKind.EXPONENT:
             return "**"
+        case TokenKind.NEWLINE:
+            return "\n"
         case TokenKind.NOT:
             return "-"
         case TokenKind.AND:
@@ -813,6 +839,8 @@ def syntax_symbols_mapper(token: Token) -> str:
             return "%"
         case TokenKind.EXPONENT:
             return "**"
+        case TokenKind.NEWLINE:
+            return "\n"
         case TokenKind.NOT:
             return "¬"
         case TokenKind.AND:
@@ -1471,12 +1499,6 @@ def tableau_serialize_json(tableau: Tableau, syntax: Syntax) -> dict:
                 child_type = "beta"
             else:
                 child_type = "openComplete"
-                # raise Exception("cannot serialize open tableau to json")
-
-        # if rule.node.hide_as_alpha and (
-        #     child_type == "alpha" or child_type == "assumption"
-        # ):
-        #     return rec(t, rules)
 
         if child_type == "assumption":
             return {
@@ -1553,9 +1575,10 @@ def tableau_serialize_json(tableau: Tableau, syntax: Syntax) -> dict:
     res["config"] = "Basic propositional"
     return res
 
+
 def print_json_online(json_tableau: dict):
     # print json as string on one line, no indentation, no spaces
-    print(json.dumps(json_tableau, separators=(',', ':')))
+    print(json.dumps(json_tableau, separators=(",", ":")))
 
 
 def find_conflicting_node(
