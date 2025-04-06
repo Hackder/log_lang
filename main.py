@@ -1752,7 +1752,7 @@ def tableau_relable_rec(tableau: Tableau, id_source: SharedCounter):
         tableau_relable_rec(tableau.beta_right, id_source)
 
 
-def tableau_run(expressions: list[Node], syntax: Syntax):
+def tableau_run(expressions: list[Node], syntax: Syntax, options: list[str] = []):
     nodes = []
     for expr in expressions:
         expr = tableau_preprocess(expr)
@@ -1761,14 +1761,17 @@ def tableau_run(expressions: list[Node], syntax: Syntax):
     tableau = tableau_generate(nodes, [], dict(), SharedCounter(), dict())
     tableau_prune_rec(tableau, set())
     tableau_relable_rec(tableau, SharedCounter())
-    # tableau_print(tableau, syntax)
 
-    tableau_json = tableau_serialize_json(tableau, syntax)
-    print_json_online(tableau_json)
+    if "json" in options:
+        tableau_json = tableau_serialize_json(tableau, syntax)
+        print_json_online(tableau_json)
+
+    else:
+        tableau_print(tableau, syntax)
 
 
 def main():
-    if len(sys.argv) != 3:
+    if 3 > len(sys.argv) or len(sys.argv) > 4:
         print("Usage: python main.py <subcommand> <options>", file=sys.stderr)
         print("python3 main.py transpile <source_file>", file=sys.stderr)
         print("python3 main.py solve <source_file>", file=sys.stderr)
@@ -1777,6 +1780,8 @@ def main():
 
     subcommand = sys.argv[1]
     source_filename = sys.argv[2]
+    options = sys.argv[3:] if len(sys.argv) > 3 else []
+
     with open(source_filename, "r") as f:
         source = f.read()
 
@@ -1803,7 +1808,9 @@ def main():
         os.execvp("python3", ["python3", "loglang_out.py"])
     elif subcommand == "tableau":
         tableau_run(
-            ast.expressions, Syntax(syntax_ascii_mapper, flatten_conj_disj=False)
+            ast.expressions,
+            Syntax(syntax_ascii_mapper, flatten_conj_disj=False),
+            options=options,
         )
 
 
