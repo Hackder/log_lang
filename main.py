@@ -6,7 +6,7 @@ import os
 import sys
 from dataclasses import dataclass
 from enum import Enum
-from typing import Callable
+from typing import Callable, override
 
 ANSII_FG_GREEN = "\033[92m"
 ANSII_FG_RED = "\033[91m"
@@ -63,6 +63,7 @@ class TokenKind(Enum):
 class Token:
     kind: TokenKind
     source: str
+    position: int
 
     def is_quantifier(self) -> bool:
         return self.kind in [TokenKind.FOR_ALL, TokenKind.EXISTS]
@@ -201,53 +202,54 @@ class Tokenizer:
     def next_token(self) -> Token:
         seen_newline = self.__skip_whitespace()
         if seen_newline:
-            return Token(TokenKind.NEWLINE, "\n")
+            return Token(TokenKind.NEWLINE, "\n", self.position)
 
         if self.position >= len(self.source):
-            return Token(TokenKind.EOF, "")
+            return Token(TokenKind.EOF, "", self.position)
 
+        token_pos = self.position
         c = self.source[self.position]
         match c:
             case x if x.isalpha() or x.isdigit() or x in ["_"]:
                 ident = self.__read_identifier()
                 if ident == "true":
-                    return Token(TokenKind.TRUE, ident)
+                    return Token(TokenKind.TRUE, ident, token_pos)
                 elif ident == "false":
-                    return Token(TokenKind.FALSE, ident)
+                    return Token(TokenKind.FALSE, ident, token_pos)
                 elif ident == "in":
-                    return Token(TokenKind.IN, ident)
+                    return Token(TokenKind.IN, ident, token_pos)
                 else:
-                    return Token(TokenKind.IDENTIFIER, ident)
+                    return Token(TokenKind.IDENTIFIER, ident, token_pos)
             case "0":
                 self.position += 1
-                return Token(TokenKind.FALSE, "0")
+                return Token(TokenKind.FALSE, "0", token_pos)
             case "1":
                 self.position += 1
-                return Token(TokenKind.TRUE, "1")
+                return Token(TokenKind.TRUE, "1", token_pos)
             case "(":
                 self.position += 1
-                return Token(TokenKind.LEFT_PAREN, c)
+                return Token(TokenKind.LEFT_PAREN, c, token_pos)
             case ")":
                 self.position += 1
-                return Token(TokenKind.RIGHT_PAREN, c)
+                return Token(TokenKind.RIGHT_PAREN, c, token_pos)
             case ",":
                 self.position += 1
-                return Token(TokenKind.COMMA, c)
+                return Token(TokenKind.COMMA, c, token_pos)
             case ":":
                 self.position += 1
-                return Token(TokenKind.COLON, c)
+                return Token(TokenKind.COLON, c, token_pos)
             case "+":
                 self.position += 1
-                return Token(TokenKind.PLUS, c)
+                return Token(TokenKind.PLUS, c, token_pos)
             case "*":
                 self.position += 1
-                return Token(TokenKind.MULTIPLY, c)
+                return Token(TokenKind.MULTIPLY, c, token_pos)
             case "%":
                 self.position += 1
-                return Token(TokenKind.MODULO, c)
+                return Token(TokenKind.MODULO, c, token_pos)
             case "^":
                 self.position += 1
-                return Token(TokenKind.EXPONENT, c)
+                return Token(TokenKind.EXPONENT, c, token_pos)
             case "-":
                 self.position += 1
                 if (
@@ -255,9 +257,9 @@ class Tokenizer:
                     and self.source[self.position] == ">"
                 ):
                     self.position += 1
-                    return Token(TokenKind.RIGHT_IMPLIES, c + ">")
+                    return Token(TokenKind.RIGHT_IMPLIES, c + ">", self.postition)
 
-                return Token(TokenKind.MINUS, c)
+                return Token(TokenKind.MINUS, c, token_pos)
             case "=":
                 self.position += 1
                 if self.position < len(self.source):
@@ -267,12 +269,12 @@ class Tokenizer:
 
                 if next_char == "=":
                     self.position += 1
-                    return Token(TokenKind.EQUALS, "==")
+                    return Token(TokenKind.EQUALS, "==", token_pos)
                 elif next_char == ">":
                     self.position += 1
-                    return Token(TokenKind.RIGHT_IMPLIES, "=>")
+                    return Token(TokenKind.RIGHT_IMPLIES, "=>", token_pos)
 
-                return Token(TokenKind.INVALID, c)
+                return Token(TokenKind.INVALID, c, token_pos)
             case "!":
                 self.position += 1
                 if self.position < len(self.source):
@@ -282,9 +284,9 @@ class Tokenizer:
 
                 if next_char == "=":
                     self.position += 1
-                    return Token(TokenKind.NOT_EQUALS, "!=")
+                    return Token(TokenKind.NOT_EQUALS, "!=", token_pos)
 
-                return Token(TokenKind.NOT, c)
+                return Token(TokenKind.NOT, c, token_pos)
             case "<":
                 self.position += 1
 
@@ -294,79 +296,79 @@ class Tokenizer:
 
                     if self.__peek_char() == ">":
                         self.position += 1
-                        return Token(TokenKind.EQUIV, "<=>")
+                        return Token(TokenKind.EQUIV, "<=>", token_pos)
 
-                    return Token(TokenKind.LESS_OR_EQUAL, "<=")
+                    return Token(TokenKind.LESS_OR_EQUAL, "<=", token_pos)
                 elif next_char == "-":
                     self.position += 1
 
                     if self.__peek_char() == ">":
                         self.position += 1
-                        return Token(TokenKind.EQUIV, "<->")
+                        return Token(TokenKind.EQUIV, "<->", token_pos)
 
-                    return Token(TokenKind.LEFT_IMPLIES, "<-")
+                    return Token(TokenKind.LEFT_IMPLIES, "<-", token_pos)
 
-                return Token(TokenKind.LESS, "<")
+                return Token(TokenKind.LESS, "<", token_pos)
             case ">":
                 self.position += 1
                 if self.__peek_char() == "=":
                     self.position += 1
-                    return Token(TokenKind.GREATER_OR_EQUAL, ">=")
+                    return Token(TokenKind.GREATER_OR_EQUAL, ">=", token_pos)
 
-                return Token(TokenKind.GREATER, ">")
+                return Token(TokenKind.GREATER, ">", token_pos)
             case "¬" | "~":
                 self.position += 1
-                return Token(TokenKind.NOT, c)
+                return Token(TokenKind.NOT, c, token_pos)
             case "&" | "∧":
                 if (
                     self.position + 1 < len(self.source)
                     and self.source[self.position + 1] == "&"
                 ):
                     self.position += 2
-                    return Token(TokenKind.AND, "&&")
+                    return Token(TokenKind.AND, "&&", token_pos)
 
                 self.position += 1
-                return Token(TokenKind.AND, c)
+                return Token(TokenKind.AND, c, token_pos)
             case "|" | "∨":
                 if (
                     self.position + 1 < len(self.source)
                     and self.source[self.position + 1] == "|"
                 ):
                     self.position += 2
-                    return Token(TokenKind.OR, "||")
+                    return Token(TokenKind.OR, "||", token_pos)
 
                 self.position += 1
-                return Token(TokenKind.OR, c)
+                return Token(TokenKind.OR, c, token_pos)
             case "∃":
                 self.position += 1
-                return Token(TokenKind.EXISTS, c)
+                return Token(TokenKind.EXISTS, c, token_pos)
             case "∀":
                 self.position += 1
-                return Token(TokenKind.FOR_ALL, c)
+                return Token(TokenKind.FOR_ALL, c, token_pos)
             case "@":
                 self.position += 1
                 ident = self.__read_identifier()
                 if ident in ["forall"]:
-                    return Token(TokenKind.FOR_ALL, "@" + ident)
+                    return Token(TokenKind.FOR_ALL, "@" + ident, token_pos)
                 elif ident in ["exists"]:
-                    return Token(TokenKind.EXISTS, "@" + ident)
+                    return Token(TokenKind.EXISTS, "@" + ident, token_pos)
                 elif ident in ["where"]:
-                    return Token(TokenKind.WHERE, "@" + ident)
+                    return Token(TokenKind.WHERE, "@" + ident, token_pos)
                 else:
-                    return Token(TokenKind.INVALID, "@" + ident)
+                    return Token(TokenKind.INVALID, "@" + ident, token_pos)
             case "#":
                 self.position += 1
                 ident = self.__read_identifier()
-                return Token(TokenKind.DIRECTIVE, "#" + ident)
+                return Token(TokenKind.DIRECTIVE, "#" + ident, token_pos)
             case "↔" | "⇔":
                 self.position += 1
-                return Token(TokenKind.EQUIV, c)
+                return Token(TokenKind.EQUIV, c, token_pos)
             case "→" | "⇒":
                 self.position += 1
-                return Token(TokenKind.RIGHT_IMPLIES, c)
+                return Token(TokenKind.RIGHT_IMPLIES, c, token_pos)
             case "←" | "⇐":
                 self.position += 1
-                return Token(TokenKind.LEFT_IMPLIES, c)
+                return Token(TokenKind.LEFT_IMPLIES, c, token_pos)
             case "/":
                 start = self.position
                 self.position += 1
@@ -377,14 +379,16 @@ class Tokenizer:
                         and self.source[self.position] != "\n"
                     ):
                         self.position += 1
-                    return Token(TokenKind.COMMENT, self.source[start : self.position])
-                return Token(TokenKind.DIVIDE, "/")
+                    return Token(
+                        TokenKind.COMMENT, self.source[start : self.position], token_pos
+                    )
+                return Token(TokenKind.DIVIDE, "/", token_pos)
             case other:
                 self.position += 1
-                return Token(TokenKind.INVALID, other)
+                return Token(TokenKind.INVALID, other, token_pos)
 
     def tokenize_all(self) -> list[Token]:
-        tokens = []
+        tokens: list[Token] = []
         while (token := self.next_token()).kind != TokenKind.EOF:
             tokens.append(token)
 
@@ -432,6 +436,7 @@ class QuantifierKind(Enum):
     FOR_ALL = 0
     EXISTS = 1
 
+    @override
     def __repr__(self) -> str:
         return super().__repr__().split(":")[0][1:]
 
@@ -475,6 +480,7 @@ class Ast:
 
 
 class Parser:
+    source: str
     tokens: list[Token]
     position: int
 
@@ -482,16 +488,17 @@ class Parser:
     _symbols: set[str]
     _dynamic_params: list[str]
 
-    def __init__(self, tokens: list[Token]):
+    def __init__(self, source: str, tokens: list[Token]):
+        self.source = source
         self.tokens = tokens
         self.position = 0
         self._atoms = set()
         self._symbols = set()
         self._dynamic_params = []
 
-    def __peek(self, distance=0) -> Token:
+    def __peek(self, distance: int = 0) -> Token:
         if self.position + distance >= len(self.tokens):
-            return Token(TokenKind.EOF, "")
+            return Token(TokenKind.EOF, "", self.position + distance)
         return self.tokens[self.position + distance]
 
     def __advance(self):
@@ -533,7 +540,7 @@ class Parser:
         child = self.__parse_logical_expression(token.priority_logical())
 
         for _ in variables:
-            self._dynamic_params.pop()
+            _ = self._dynamic_params.pop()
 
         return QuantifierNode(token, kind, variables, directive, child)
 
@@ -547,9 +554,10 @@ class Parser:
             return AtomicFormula(name)
         self.__advance()
 
-        params = []
+        params: list[IdentifierNode] = []
         while self.__peek().kind != TokenKind.RIGHT_PAREN:
             param = self.__parse_expression()
+            assert isinstance(param, IdentifierNode), "Expected identifier"
             params.append(param)
 
             if self.__peek().kind == TokenKind.COMMA:
@@ -566,7 +574,7 @@ class Parser:
 
         if self.__peek().kind == TokenKind.LEFT_PAREN:
             self.__advance()
-            params = []
+            params: list[Node] = []
             while self.__peek().kind != TokenKind.RIGHT_PAREN:
                 params.append(self.__parse_expression())
                 next_token = self.__peek()
@@ -596,6 +604,10 @@ class Parser:
                                     ]
                                     for value in range(*values):
                                         self._symbols.add(str(value))
+                                case _:
+                                    raise Exception(f"Invalid directive: {token}")
+                        case _:
+                            raise Exception(f"Invalid directive parameters: {param}")
             case _:
                 pass
 
@@ -614,7 +626,7 @@ class Parser:
         child = self.__parse_logical_expression()
         return WhereClauseNode(token, condition, child)
 
-    def __parse_logical_expression(self, current_priority=0) -> Node:
+    def __parse_logical_expression(self, current_priority: int = 0) -> Node:
         token = self.__peek()
         while token.kind == TokenKind.NEWLINE:
             self.__advance()
@@ -646,7 +658,7 @@ class Parser:
         elif token.kind == TokenKind.DIRECTIVE:
             return self.__parse_directive()
         else:
-            raise Exception(f"Invalid expression got: {token}")
+            raise Exception(f"Invalid logical expression got: {token}")
 
         op = self.__peek()
         while op.is_logical_binary_op() and op.priority_logical() >= current_priority:
@@ -659,7 +671,7 @@ class Parser:
 
         return child
 
-    def __parse_expression(self, current_priority=0) -> Node:
+    def __parse_expression(self, current_priority: int = 0) -> Node:
         token = self.__peek()
 
         while token.kind == TokenKind.NEWLINE:
@@ -704,14 +716,41 @@ class Parser:
 
         return child
 
-    def parse(self) -> Ast:
-        nodes = []
-        while self.__peek().kind != TokenKind.EOF:
-            nodes.append(self.__parse_logical_expression())
-            while self.__peek().kind == TokenKind.NEWLINE:
-                self.__advance()
+    def parse(self) -> Ast | None:
+        try:
+            nodes: list[Node] = []
+            while self.__peek().kind != TokenKind.EOF:
+                nodes.append(self.__parse_logical_expression())
+                while self.__peek().kind == TokenKind.NEWLINE:
+                    self.__advance()
+            return Ast(self._atoms, self._symbols, nodes)
+        except Exception as e:
+            token = self.__peek()
+            source_before_token = self.source[: token.position]
+            line_breaks_before_token = source_before_token.count("\n")
+            line_number = line_breaks_before_token + 1
+            last_linebreak_pos = source_before_token.rfind("\n")
+            if last_linebreak_pos == -1:
+                last_linebreak_pos = 0
+            else:
+                last_linebreak_pos += 1
+            column_number = token.position - last_linebreak_pos
 
-        return Ast(self._atoms, self._symbols, nodes)
+            all_lines = self.source.split("\n")
+            relevant_line = all_lines[line_number - 1]
+            print(
+                ANSII_FG_RED
+                + f"Error at line {line_number}, column {column_number}"
+                + ANSII_RESET,
+                file=sys.stderr,
+            )
+            print(relevant_line, file=sys.stderr)
+            print(
+                ANSII_FG_RED + " " * column_number + "^- " + str(e) + ANSII_RESET,
+                file=sys.stderr,
+            )
+
+            return None
 
 
 @dataclass
@@ -869,7 +908,7 @@ def syntax_symbols_mapper(token: Token) -> str:
 
 
 def node_to_formal_string(
-    node: Node, syntax: Syntax, _flattening_conj_disj=False
+    node: Node, syntax: Syntax, _flattening_conj_disj: bool = False
 ) -> str:
     match node:
         case IdentifierNode(token, _):
@@ -937,7 +976,9 @@ def node_replace_variable_references(
     match node:
         case IdentifierNode(token, dynamic_param):
             if token.source == old_var_name:
-                return IdentifierNode(Token(token.kind, new_var_name), dynamic_param)
+                return IdentifierNode(
+                    Token(token.kind, new_var_name, token.position), dynamic_param
+                )
             else:
                 return node
         case BinOpNode(token, left, right):
@@ -985,7 +1026,7 @@ def node_replace_variable_references(
                 new_child,
             )
         case PredicateNode(token, params):
-            new_params = []
+            new_params: list[IdentifierNode] = []
             for param in params:
                 new_param = node_replace_variable_references(
                     param, old_var_name, new_var_name
@@ -1292,7 +1333,7 @@ def python_excape_name(name: str) -> str:
 
 def z3_generate(ctx: Context) -> str:
     ident = " " * 4
-    lines = []
+    lines: list[str] = []
 
     # generate predicates
     letters = "abcdefghijklmnopqrstuvwxyz"
@@ -1396,6 +1437,8 @@ def tableau_rule_to_formal_string(rule: TableauRule, syntax: Syntax) -> str:
             return f"({node.id}) Alpha {tableau_node_to_formal_string(node, syntax)}  (from: {node.parent_id()})"
         case TableauBetaRule(left, right):
             return f"({left.id}) Beta {tableau_node_to_formal_string(left, syntax)} {tableau_node_to_formal_string(right, syntax)}"
+        case other_rule:
+            raise Exception(f"{other_rule} not yet supported in formatting")
 
 
 @dataclass
@@ -1478,23 +1521,23 @@ def tableau_rule_get_nodes(rule: TableauRule) -> list[TableauNode]:
             return [left, right]
         case TableauGamaRule(_, _, node):
             return [node]
-        case TableauDeltaRule(_, node):
+        case TableauDeltaRule(_, _, node):
             return [node]
 
 
 def tableau_preprocess(node: Node) -> Node:
     match node:
-        case BinOpNode(Token(TokenKind.LEFT_IMPLIES, _), left, right):
+        case BinOpNode(Token(TokenKind.LEFT_IMPLIES, _, pos), left, right):
             left = tableau_preprocess(left)
             right = tableau_preprocess(right)
-            return BinOpNode(Token(TokenKind.RIGHT_IMPLIES, "->"), right, left)
-        case BinOpNode(Token(TokenKind.EQUIV, _), left, right):
+            return BinOpNode(Token(TokenKind.RIGHT_IMPLIES, "->", pos), right, left)
+        case BinOpNode(Token(TokenKind.EQUIV, _, pos), left, right):
             left = tableau_preprocess(left)
             right = tableau_preprocess(right)
             return BinOpNode(
-                Token(TokenKind.AND, "&&"),
-                BinOpNode(Token(TokenKind.RIGHT_IMPLIES, "->"), left, right),
-                BinOpNode(Token(TokenKind.RIGHT_IMPLIES, "->"), right, left),
+                Token(TokenKind.AND, "&&", pos),
+                BinOpNode(Token(TokenKind.RIGHT_IMPLIES, "->", pos), left, right),
+                BinOpNode(Token(TokenKind.RIGHT_IMPLIES, "->", pos), right, left),
             )
         case BinOpNode(token, left, right):
             return BinOpNode(token, tableau_preprocess(left), tableau_preprocess(right))
@@ -1575,7 +1618,7 @@ class Tableau:
     depth: int = 0
 
 
-def tableau_print(tableau: Tableau, syntax: Syntax, indentation=0):
+def tableau_print(tableau: Tableau, syntax: Syntax, indentation: int = 0):
     indent = " " * indentation * 4
     for rule in tableau.rules:
         if rule.node.hide_as_alpha:
@@ -1889,7 +1932,7 @@ def tableau_relable_rec(tableau: Tableau, id_source: SharedCounter):
 
 
 def tableau_run(expressions: list[Node], syntax: Syntax, options: list[str] = []):
-    nodes = []
+    nodes: list[TableauNode] = []
     for expr in expressions:
         expr = tableau_preprocess(expr)
         nodes.append(TableauNode(True, expr))
@@ -1923,14 +1966,17 @@ def main():
 
     tokenizer = Tokenizer(source)
 
-    tokens = []
+    tokens: list[Token] = []
     while (token := tokenizer.next_token()).kind != TokenKind.EOF:
         if token.kind == TokenKind.COMMENT:
             continue
         tokens.append(token)
 
-    parser = Parser(tokens)
+    parser = Parser(source, tokens)
     ast = parser.parse()
+
+    if ast is None:
+        exit(1)
 
     if "--json" not in options:
         for expr in ast.expressions:

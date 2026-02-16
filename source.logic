@@ -1,2 +1,2 @@
-(A∨¬A)
-
+#symbols(#range(1, 3))
+@exists x, y @where x != y (name(x) & name(y))
