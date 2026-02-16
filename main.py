@@ -1898,7 +1898,7 @@ def tableau_run(expressions: list[Node], syntax: Syntax, options: list[str] = []
     tableau_prune_rec(tableau, set())
     tableau_relable_rec(tableau, SharedCounter())
 
-    if "json" in options:
+    if "--json" in options:
         tableau_json = tableau_serialize_json(tableau, syntax)
         print_json_online(tableau_json)
 
@@ -1932,9 +1932,10 @@ def main():
     parser = Parser(tokens)
     ast = parser.parse()
 
-    for expr in ast.expressions:
-        print("-----------------------")
-        print(node_to_formal_string(expr, Syntax.default()))
+    if "--json" not in options:
+        for expr in ast.expressions:
+            print("-----------------------")
+            print(node_to_formal_string(expr, Syntax.default()))
 
     ctx = Context(ast, [])
 

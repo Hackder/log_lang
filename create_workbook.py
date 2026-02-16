@@ -128,7 +128,6 @@ def main():
                 assert data_lines, "No data found in cell"
 
                 if "solve" in data_lines[0].lower():
-                    print("Solving with log_lang")
                     # Need to solve it - write data to source.logic
                     assert len(data_lines) > 1
                     with open("source.logic", "w") as f:
@@ -143,7 +142,7 @@ def main():
 
                     print("    solving with loglang")
                     result = subprocess.run(
-                        [python_path, script_path, "tableau", "source.logic", "json"],
+                        [python_path, script_path, "tableau", "source.logic", "--json"],
                         capture_output=True,
                         text=True,
                     )
