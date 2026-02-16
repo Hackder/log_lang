@@ -128,15 +128,18 @@ def main():
                 assert data_lines, "No data found in cell"
 
                 if "solve" in data_lines[0].lower():
-                    # Need to solve it - write data to source.txt
+                    print("Solving with log_lang")
+                    # Need to solve it - write data to source.logic
                     assert len(data_lines) > 1
                     with open("source.logic", "w") as f:
                         for line in data_lines[1:]:
                             f.write(line + "\n")
 
                     # Run the loglang command and capture output
-                    python_path = os.path.expanduser("~/log_lang/.venv/bin/python3")
-                    script_path = os.path.expanduser("~/log_lang/main.py")
+                    python_path = os.path.expanduser(
+                        "~/school/logic/log_lang/.venv/bin/python3"
+                    )
+                    script_path = os.path.expanduser("~/school/logic/log_lang/main.py")
 
                     print("    solving with loglang")
                     result = subprocess.run(
@@ -147,13 +150,13 @@ def main():
                     tableau_data = result.stdout.strip()
 
                     # Delete temporary file
-                    os.remove("source.txt")
 
                     if result.returncode != 0:
                         print("Error running loglang")
                         print(result.stderr)
                         sys.exit(1)
 
+                    os.remove("source.logic")
                     print("    solved")
 
                 else:
