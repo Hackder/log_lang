@@ -1,0 +1,22 @@
+// Graph theory examples
+// Representing graph properties in logic
+
+#symbols(a, b, c, d)
+
+// Edge predicate: Edge(x, y) means there's an edge from x to y
+// Path predicate: Path(x, y) means there's a path from x to y
+
+// Reflexivity: every node has a path to itself
+@forall x: Path(x, x)
+
+// Edge implies Path
+@forall x, y: (Edge(x, y) -> Path(x, y))
+
+// Transitivity of paths
+@forall x, y, z: (Path(x, y) & Path(y, z) -> Path(x, z))
+
+// Symmetric graph: if Edge(x,y) then Edge(y,x)
+@forall x, y: (Edge(x, y) -> Edge(y, x))
+
+// Complete graph: every pair of distinct nodes has an edge
+@forall x, y @where x != y: Edge(x, y)

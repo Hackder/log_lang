@@ -1,0 +1,10 @@
+// Mathematical properties (simplified for solve command)
+
+// Commutativity using predicates instead of equality
+@forall x, y: (Eq(x, y) -> Eq(y, x))
+
+// Transitivity (note the parentheses!)
+@forall x, y, z: (Eq(x, y) & Eq(y, z) -> Eq(x, z))
+
+// Reflexivity
+@forall x: Eq(x, x)

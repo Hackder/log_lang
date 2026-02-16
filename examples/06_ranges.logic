@@ -1,0 +1,16 @@
+// Advanced quantifier examples with ranges
+
+// Define a range of symbols
+#symbols(#range(1, 4))
+
+// For all x in range(1,4), P(x) holds
+@forall x in #range(1, 4): P(x)
+
+// There exists x in range(1,4) such that P(x)
+@exists x in #range(1, 4): P(x)
+
+// Multiple variables with range
+@forall x, y in #range(1, 3): R(x, y)
+
+// Complex quantified expression
+@forall x in #range(1, 3): @exists y in #range(1, 3): Loves(x, y)

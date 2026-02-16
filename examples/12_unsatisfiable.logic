@@ -1,0 +1,4 @@
+// Unsatisfiable example - should be unsatisfiable
+
+// Contradiction: A and not A
+A & -A

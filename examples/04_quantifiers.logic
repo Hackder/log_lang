@@ -1,0 +1,16 @@
+// Quantifier examples
+// Using quantifiers with the solve command
+
+#symbols(a, b)
+
+// Universal quantifier: for all x, P(x) holds
+@forall x: P(x)
+
+// Existential quantifier: there exists x such that P(x) holds
+@exists x: P(x)
+
+// Universal with implication (note the parentheses!)
+@forall x: (P(x) -> Q(x))
+
+// Existential with conjunction (note the parentheses!)
+@exists x: (P(x) & Q(x))

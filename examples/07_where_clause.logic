@@ -1,0 +1,16 @@
+// Using @where clause for constraints
+// NOTE: This example is currently broken because #range generates string symbols
+// and numeric comparisons like x > 2 don't work with strings.
+
+#symbols(#range(1, 5))
+
+// For all x where x > 2, P(x) holds
+// BROKEN: x is a string like '1', '2', not an integer
+// @forall x @where x > 2: P(x)
+
+// There exists x where x != 1 and P(x)
+@exists x @where x != 1: P(x)
+
+// Complex where condition
+// BROKEN: numeric comparison with string symbols
+// @forall x @where x > 1 & x < 4: Q(x)

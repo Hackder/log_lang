@@ -1,0 +1,21 @@
+// Classic logic puzzles and examples
+// Pure propositional logic without symbols directive
+
+// Modus Ponens: If A -> B and A, then B
+((A -> B) & A) -> B
+
+// Modus Tollens: If A -> B and -B, then -A
+((A -> B) & -B) -> -A
+
+// Law of excluded middle: A | -A
+A | -A
+
+// Law of non-contradiction: -(A & -A)
+-(A & -A)
+
+// Double negation: A <-> -(-A)
+A <-> -(-A)
+
+// De Morgan's laws
+-(A & B) <-> (-A | -B)
+-(A | B) <-> (-A & -B)

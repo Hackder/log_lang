@@ -1,0 +1,17 @@
+// Implications and equivalences
+// This file demonstrates logical implication and equivalence
+
+// Simple implication: A -> B (if A then B)
+A -> B
+
+// Reverse implication: A <- B (A if B)
+A <- B
+
+// Equivalence: A <-> B (A if and only if B)
+A <-> B
+
+// Chain of implications
+A -> B -> C
+
+// Complex: (A -> B) & (B -> C) -> (A -> C)
+((A -> B) & (B -> C)) -> (A -> C)

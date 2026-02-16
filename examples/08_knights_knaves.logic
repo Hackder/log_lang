@@ -1,0 +1,12 @@
+// Knights and Knaves puzzle (classic logic puzzle)
+// Knights always tell the truth, knaves always lie
+
+// Person A says: "B is a knight"
+// Person B says: "A is a knave"
+
+// If A is a knight, then B is a knight: A -> B
+// If A is a knave, then B is not a knight: -A -> -B
+// If B is a knight, then A is a knave: B -> -A
+// If B is a knave, then A is not a knave: -B -> A
+
+((A -> B) & (-A -> -B)) & ((B -> -A) & (-B -> A))

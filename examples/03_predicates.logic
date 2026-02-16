@@ -1,0 +1,14 @@
+// Simple propositional logic example
+// Just basic boolean variables without directives
+
+// Simple conjunction
+A & B
+
+// Implication
+A -> B
+
+// Negation
+-C
+
+// Complex expression
+(A & B) -> C

@@ -257,7 +257,7 @@ class Tokenizer:
                     and self.source[self.position] == ">"
                 ):
                     self.position += 1
-                    return Token(TokenKind.RIGHT_IMPLIES, c + ">", self.postition)
+                    return Token(TokenKind.RIGHT_IMPLIES, c + ">", self.position)
 
                 return Token(TokenKind.MINUS, c, token_pos)
             case "=":
@@ -594,10 +594,10 @@ class Parser:
             case "#symbols":
                 for param in params:
                     match param:
-                        case IdentifierNode(token, _):
+                        case IdentifierNode(_, _):
                             self._symbols.add(param.token.source)
-                        case DirectiveNode(token, directive_params):
-                            match token.source:
+                        case DirectiveNode(param_token, directive_params):
+                            match param_token.source:
                                 case "#range":
                                     values = [
                                         int(p.token.source) for p in directive_params
@@ -605,7 +605,7 @@ class Parser:
                                     for value in range(*values):
                                         self._symbols.add(str(value))
                                 case _:
-                                    raise Exception(f"Invalid directive: {token}")
+                                    raise Exception(f"Invalid directive: {param_token}")
                         case _:
                             raise Exception(f"Invalid directive parameters: {param}")
             case _:

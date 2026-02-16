@@ -1,0 +1,7 @@
+// Satisfiable example - should have solutions
+
+// Simple satisfiable formula
+A | B
+
+// Another satisfiable formula
+A -> B

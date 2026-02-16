@@ -1,0 +1,14 @@
+// Basic propositional logic examples
+// This file demonstrates AND, OR, NOT operations
+
+// Simple conjunction: A & B
+A & B
+
+// Simple disjunction: A | B
+A | B
+
+// Negation: -A
+-A
+
+// Complex expression: (A & B) | (-A & -B)
+(A & B) | (-A & -B)
