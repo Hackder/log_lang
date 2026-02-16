@@ -672,7 +672,8 @@ class Parser:
             if token.source in self._dynamic_params:
                 child.dynamic_param = True
             else:
-                self._symbols.add(token.source)
+                # self._symbols.add(token.source)
+                pass
         elif token.kind == TokenKind.LEFT_PAREN:
             self.__advance()
             child = self.__parse_expression(0)
@@ -930,6 +931,73 @@ def node_to_formal_string(
             return syntax.token_mapper(token)
 
 
+def node_replace_variable_references(
+    node: Node, old_var_name: str, new_var_name: str
+) -> Node:
+    match node:
+        case IdentifierNode(token, dynamic_param):
+            if token.source == old_var_name:
+                return IdentifierNode(Token(token.kind, new_var_name), dynamic_param)
+            else:
+                return node
+        case BinOpNode(token, left, right):
+            return BinOpNode(
+                token,
+                node_replace_variable_references(left, old_var_name, new_var_name),
+                node_replace_variable_references(right, old_var_name, new_var_name),
+            )
+        case UnaryOpNode(token, child):
+            return UnaryOpNode(
+                token,
+                node_replace_variable_references(child, old_var_name, new_var_name),
+            )
+        case BoolNode(_, _) as bool_node:
+            return bool_node
+        case DirectiveNode(token, params):
+            return DirectiveNode(
+                token,
+                [
+                    node_replace_variable_references(param, old_var_name, new_var_name)
+                    for param in params
+                ],
+            )
+        case WhereClauseNode(token, condition, child):
+            return WhereClauseNode(
+                token,
+                node_replace_variable_references(condition, old_var_name, new_var_name),
+                node_replace_variable_references(child, old_var_name, new_var_name),
+            )
+        case QuantifierNode(token, kind, variables, directive, child) as quantifier:
+            # if we shadow the outer variable we don't continue down this branch
+            for variable in variables:
+                if variable.token.source == old_var_name:
+                    return quantifier
+
+            new_child = node_replace_variable_references(
+                child, old_var_name, new_var_name
+            )
+
+            return QuantifierNode(
+                token,
+                kind,
+                variables,
+                directive,
+                new_child,
+            )
+        case PredicateNode(token, params):
+            new_params = []
+            for param in params:
+                new_param = node_replace_variable_references(
+                    param, old_var_name, new_var_name
+                )
+                assert isinstance(new_param, IdentifierNode)
+                new_params.append(new_param)
+
+            return PredicateNode(token, new_params)
+        case AtomicFormula(token):
+            return AtomicFormula(token)
+
+
 AstTransformer = Callable[[Node], Node]
 
 
@@ -1094,6 +1162,8 @@ z3_template = r"""
 import itertools
 import sys
 from z3 import And, Not, Bool, Implies, Or, Solver
+
+f_ = "f_"
 
 %%%
 
@@ -1349,7 +1419,55 @@ class TableauBetaRule:
         return TableauBetaRule(copy.copy(self.left), copy.copy(self.right))
 
 
-TableauRule = TableauAlphaRule | TableauBetaRule
+@dataclass
+class TableauGamaRule:
+    current_var_name: str
+    assigned_var_name: str | None
+    node: TableauNode
+
+    def parent_id(self) -> int:
+        return self.node.parent_id()
+
+    def assign_var_name(self, new_name: str) -> TableauGamaRule:
+        assert self.assigned_var_name is None
+        return TableauGamaRule(
+            self.current_var_name,
+            new_name,
+            TableauNode(
+                self.node.value,
+                node_replace_variable_references(
+                    self.node.node, self.current_var_name, new_name
+                ),
+                self.node.parent,
+            ),
+        )
+
+
+@dataclass
+class TableauDeltaRule:
+    current_var_name: str
+    assigned_var_name: str | None
+    node: TableauNode
+
+    def parent_id(self) -> int:
+        return self.node.parent_id()
+
+    def assign_var_name(self, new_name: str) -> TableauDeltaRule:
+        assert self.assigned_var_name is None
+        return TableauDeltaRule(
+            self.current_var_name,
+            new_name,
+            TableauNode(
+                self.node.value,
+                node_replace_variable_references(
+                    self.node.node, self.current_var_name, new_name
+                ),
+                self.node.parent,
+            ),
+        )
+
+
+TableauRule = TableauAlphaRule | TableauBetaRule | TableauGamaRule | TableauDeltaRule
 
 
 def tableau_rule_get_nodes(rule: TableauRule) -> list[TableauNode]:
@@ -1358,6 +1476,10 @@ def tableau_rule_get_nodes(rule: TableauRule) -> list[TableauNode]:
             return [node]
         case TableauBetaRule(left, right):
             return [left, right]
+        case TableauGamaRule(_, _, node):
+            return [node]
+        case TableauDeltaRule(_, node):
+            return [node]
 
 
 def tableau_preprocess(node: Node) -> Node:
@@ -1425,6 +1547,20 @@ def tableau_node_expand(node: TableauNode) -> list[TableauRule]:
             return []
         case (_, PredicateNode(_, _)):
             return []
+        case (True, QuantifierNode(token, QuantifierKind.FOR_ALL, variables, _, child)):
+            # here we need to choose a specific element name and use that in place of the quantifier
+            assert len(variables) == 1, "temporary limitation to simplify the code"
+            return [
+                TableauGamaRule(
+                    variables[0].token.source,
+                    None,
+                    TableauNode(
+                        True,
+                        child,
+                        node,
+                    ),
+                )
+            ]
         case other:
             raise Exception(f"Unsupported node for tableau expansion: {other}")
 
@@ -1795,6 +1931,10 @@ def main():
 
     parser = Parser(tokens)
     ast = parser.parse()
+
+    for expr in ast.expressions:
+        print("-----------------------")
+        print(node_to_formal_string(expr, Syntax.default()))
 
     ctx = Context(ast, [])
 

@@ -93,13 +93,17 @@
 // p(a) -> p(c)
 // ((p(a) | p(b)) -> p(c))
 
-Kim | Jim | Sarah
+// #symbols(a)
+// 
+// ∀x(cat(x)→((dead(x)∧alive(x))→schroedinger(x)))
+// ∀x((cat(x)∧schroedinger(x))→∃y(box(y)∧inside(x,y)))
+// ∀x(cat(x)↔purrs(x))
+// ((∃x(cat(x)∧alive(x))∧∃x(cat(x)∧dead(x)))→∃x(schroedinger(x)∧purrs(x)))
+// // (¬∃xbox(x)→∀x(schroedinger(x)→¬purrs(x)))
 
-Kim -> !Sarah
+#symbols(a,b)
 
-Jim -> Kim
-
-!Jim -> !Sarah
-
-
-
+@forall x (P(f_ + x))
+@forall y (P(y) -> @exists x @where ((f_ + x) == y) (x | !x))
+@forall x @forall y (R(x,y) -> Q(f_+x,f_+y))
+- ((@exists x @forall y R(x,y)) -> @exists x (P(x) & @forall y (P(y) -> Q(x,y))))
